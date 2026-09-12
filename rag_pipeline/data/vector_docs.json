@@ -1,0 +1,151 @@
+{
+  "documents": [
+    {
+      "id": "warn_green",
+      "category": "warning_severity",
+      "title": "Green Alert",
+      "text": "A Green alert means no significant weather warning is in effect. Conditions are considered normal for the season. No special precautions are needed, though it's always good practice to stay aware of updates.",
+      "tags": ["all"]
+    },
+    {
+      "id": "warn_yellow",
+      "category": "warning_severity",
+      "title": "Yellow Alert",
+      "text": "A Yellow alert means 'watch and stay updated.' Moderate weather is expected that could affect daily activities, such as scattered heavy rain, gusty winds, or a mild heat spell. It is not immediately dangerous, but conditions should be monitored, especially before travel or outdoor work.",
+      "tags": ["all"]
+    },
+    {
+      "id": "warn_orange",
+      "category": "warning_severity",
+      "title": "Orange Alert",
+      "text": "An Orange alert means 'be prepared.' Weather conditions are expected to be disruptive or potentially dangerous, such as heavy to very heavy rainfall, strong winds, or a severe heat/cold spell. People should avoid unnecessary travel, secure loose outdoor items, and stay tuned to official updates for their area.",
+      "tags": ["all"]
+    },
+    {
+      "id": "warn_red",
+      "category": "warning_severity",
+      "title": "Red Alert",
+      "text": "A Red alert means 'take action.' Severe to extremely severe weather is expected, posing a real danger to life and property, such as extremely heavy rainfall, a landfalling cyclone, or an extreme heat/cold wave. Authorities may recommend evacuation or shelter-in-place. Follow official instructions immediately and avoid all non-essential movement.",
+      "tags": ["all"]
+    },
+    {
+      "id": "rain_le",
+      "category": "rainfall_category",
+      "title": "Large Excess (LE) Rainfall",
+      "text": "Large Excess (LE) rainfall means actual rainfall exceeded the normal expected amount by 60% or more. This often signals a high risk of localized flooding or waterlogging, particularly in low-lying or poorly drained areas.",
+      "tags": ["all"]
+    },
+    {
+      "id": "rain_e",
+      "category": "rainfall_category",
+      "title": "Excess (E) Rainfall",
+      "text": "Excess (E) rainfall means actual rainfall was 20% to 59% above the normal expected amount. Fields and low-lying areas may see temporary waterlogging, though it is generally less severe than Large Excess conditions.",
+      "tags": ["all"]
+    },
+    {
+      "id": "rain_n",
+      "category": "rainfall_category",
+      "title": "Normal (N) Rainfall",
+      "text": "Normal (N) rainfall means actual rainfall was within 19% of the long-period average for that period and location. This is considered typical seasonal rainfall with no unusual excess or deficiency.",
+      "tags": ["all"]
+    },
+    {
+      "id": "rain_d",
+      "category": "rainfall_category",
+      "title": "Deficient (D) Rainfall",
+      "text": "Deficient (D) rainfall means actual rainfall was 20% to 59% below the normal expected amount. This can begin to stress crops and water supplies if it persists over multiple weeks.",
+      "tags": ["farmer", "rural_area"]
+    },
+    {
+      "id": "rain_ld",
+      "category": "rainfall_category",
+      "title": "Large Deficient (LD) Rainfall",
+      "text": "Large Deficient (LD) rainfall means actual rainfall was 60% to 99% below normal. This level of shortfall poses a serious risk to crops, drinking water supplies, and can be an early indicator of drought conditions.",
+      "tags": ["farmer", "rural_area"]
+    },
+    {
+      "id": "rain_nr",
+      "category": "rainfall_category",
+      "title": "No Rain (NR)",
+      "text": "No Rain (NR) means there was no measurable rainfall recorded during the period, i.e. a 100% deficiency. Prolonged NR periods during the monsoon season are a strong drought warning sign.",
+      "tags": ["farmer", "rural_area"]
+    },
+    {
+      "id": "safety_heatwave",
+      "category": "disaster_safety",
+      "title": "Heatwave Safety Guidance",
+      "text": "During a heatwave, avoid outdoor activity between 12pm and 3pm, drink water regularly even without feeling thirsty, and wear light-colored, loose cotton clothing. Watch for signs of heat exhaustion such as dizziness, nausea, or heavy sweating, and move to a cool, shaded place immediately if they occur. Check on elderly neighbors and outdoor workers, who are at higher risk.",
+      "tags": ["all"]
+    },
+    {
+      "id": "safety_coldwave",
+      "category": "disaster_safety",
+      "title": "Cold Wave Safety Guidance",
+      "text": "During a cold wave, wear layered clothing and keep extremities (hands, feet, ears) covered, since heat loss happens fastest there. Avoid prolonged outdoor exposure, especially at night. Keep a check on infants, the elderly, and people without adequate housing, who are most vulnerable to cold-related illness.",
+      "tags": ["all"]
+    },
+    {
+      "id": "safety_flood",
+      "category": "disaster_safety",
+      "title": "Heavy Rainfall and Flooding Safety Guidance",
+      "text": "During heavy rainfall warnings, avoid crossing flooded roads or rivers, even if the water looks shallow, since currents can be deceptively strong. Move valuables and important documents to higher ground if flooding is likely in your area. Avoid contact with standing floodwater, which can carry contamination or hidden hazards like open drains.",
+      "tags": ["all"]
+    },
+    {
+      "id": "safety_thunderstorm",
+      "category": "disaster_safety",
+      "title": "Thunderstorm and Lightning Safety Guidance",
+      "text": "During a thunderstorm, move indoors and avoid open fields, tall isolated trees, and water bodies. Unplug sensitive electronics if lightning is frequent nearby. If caught outdoors with no shelter, crouch low with feet together rather than lying flat, and avoid being the tallest object in the area.",
+      "tags": ["all"]
+    },
+    {
+      "id": "safety_fog",
+      "category": "disaster_safety",
+      "title": "Dense Fog Safety Guidance",
+      "text": "During dense fog, reduce vehicle speed significantly and use fog lights rather than high beams, which reflect off fog and reduce visibility further. Increase following distance between vehicles. Where possible, delay non-essential travel, especially on highways, until visibility improves.",
+      "tags": ["all", "rural_area"]
+    },
+    {
+      "id": "safety_cyclone_general",
+      "category": "disaster_safety",
+      "title": "General Cyclone Preparedness",
+      "text": "If a cyclone warning is issued for your coastal area, secure or bring indoors loose outdoor items, keep emergency supplies (water, dry food, torch, charged power bank) ready, and follow official evacuation instructions without delay if issued. Avoid the coast and venturing out to sea once a warning is in effect. Note: this is general preparedness guidance only — for live, tracked cyclone path and category data, official IMD cyclone bulletins should be consulted directly.",
+      "tags": ["fisherman", "all"]
+    },
+    {
+      "id": "role_crop_sensitivity",
+      "category": "role_reference",
+      "title": "General Crop-Weather Sensitivity",
+      "text": "Most staple crops are sensitive to excess moisture at the root stage, which can cause rot, and to heat stress during flowering, which can reduce yield. Waterlogging from excess rainfall is often more damaging in the short term than moderate rainfall deficiency, since standing water can kill roots within days. Timing of irrigation or pesticide spraying should generally avoid periods of high wind or expected rainfall within 24 hours.",
+      "tags": ["farmer"]
+    },
+    {
+      "id": "role_fishing_safety",
+      "category": "role_reference",
+      "title": "Safe Conditions for Fishing at Sea",
+      "text": "As a general guideline, sustained wind speeds above 40-50 km/h or wave heights above 2-3 meters are considered unsafe for small fishing boats to venture out. Wind gusts significantly higher than sustained wind speed indicate unstable, unpredictable conditions and warrant extra caution. Always check for official fishermen warnings before departure, since local conditions can worsen faster than general forecasts suggest.",
+      "tags": ["fisherman"]
+    },
+    {
+      "id": "role_monsoon_context",
+      "category": "role_reference",
+      "title": "Indian Monsoon Seasonal Context",
+      "text": "India's southwest monsoon typically arrives in Kerala around late May to early June and gradually covers the country by mid-July, withdrawing from around September onward. The northeast monsoon brings a secondary rainy season to parts of southern India, especially Tamil Nadu, between October and December. Rainfall timing and intensity can vary significantly by region and year, which is why comparing actual rainfall to the historical normal for a specific period is more informative than raw totals alone.",
+      "tags": ["all", "farmer", "rural_area"]
+    },
+    {
+      "id": "role_drought_context",
+      "category": "role_reference",
+      "title": "Recognizing Early Drought Conditions",
+      "text": "Early signs of drought risk include consecutive weeks of Deficient or Large Deficient rainfall during the monsoon season, unusually low soil moisture readings, and rapidly dropping reservoir or groundwater levels. Communities relying on rain-fed agriculture or shallow wells are typically affected earliest. Conserving water and adjusting irrigation schedules early, rather than after visible crop stress appears, generally reduces overall losses.",
+      "tags": ["farmer", "rural_area"]
+    },
+    {
+      "id": "role_air_quality_health",
+      "category": "role_reference",
+      "title": "Air Quality and Health Guidance",
+      "text": "When PM2.5 levels or the AQI reach unhealthy ranges, sensitive groups (children, the elderly, and people with respiratory or heart conditions) should limit prolonged outdoor exertion. On days with poor air quality, keeping windows closed during peak traffic hours and using an air purifier indoors, if available, can reduce exposure. Outdoor exercise is best shifted to early morning hours when pollutant levels are typically lower.",
+      "tags": ["urban_citizen"]
+    }
+  ]
+}
