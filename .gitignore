@@ -10,3 +10,4 @@ rag_pipeline/data/chroma_db/
 *.pyc
 .DS_Store
 ANTIGRAVITY.md
+API_DOCS.md
