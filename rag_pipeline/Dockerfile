@@ -20,6 +20,6 @@ COPY . .
 # Expose the port
 EXPOSE 8000
 
-# Run the ingestion script, then start the uvicorn server
-CMD python scripts/ingest_vector_store.py && uvicorn src.main:app --host 0.0.0.0 --port 8000
+# Run the ingestion script, then start the uvicorn server on Render's dynamic port
+CMD python scripts/ingest_vector_store.py && uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000}
 
