@@ -2,6 +2,10 @@
 
 This document describes the REST API exposed by the `rag_pipeline` microservice. The MERN backend should use these endpoints to generate weather forecasts and answer user queries.
 
+## 🌐 Base URL
+**Production:** `https://weathergpt-sih-2026-stjn.onrender.com`
+**Local Development:** `http://localhost:8000`
+
 ## 🔐 Authentication
 The `/chat` endpoint is protected by a shared-secret API key. 
 All requests to protected endpoints MUST include the following header:
