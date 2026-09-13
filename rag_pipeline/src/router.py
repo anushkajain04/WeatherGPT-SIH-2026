@@ -30,7 +30,7 @@ class LangchainGeminiEmbeddingFunction(EmbeddingFunction):
         # Import inside to avoid issues if not used
         from langchain_google_genai import GoogleGenerativeAIEmbeddings
         self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/text-embedding-004", 
+            model="models/gemini-embedding-2", 
             google_api_key=api_key
         )
 
