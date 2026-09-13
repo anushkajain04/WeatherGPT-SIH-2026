@@ -5,7 +5,6 @@ from typing import List, Dict, Any
 import sys
 from pathlib import Path
 from rank_bm25 import BM25Okapi
-from sentence_transformers import CrossEncoder
 
 os.environ.setdefault("USE_TF", "0")
 os.environ.setdefault("USE_FLAX", "0")
@@ -20,6 +19,7 @@ COLLECTION_NAME = "weathergpt_knowledge"
 reranker = None
 if os.getenv("DISABLE_RERANKER") != "1":
     try:
+        from sentence_transformers import CrossEncoder
         reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", max_length=512)
     except Exception as e:
         print(f"Warning: Failed to load cross-encoder: {e}")
