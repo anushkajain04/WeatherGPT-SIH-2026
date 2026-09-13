@@ -46,8 +46,13 @@ def ingest_documents():
         return
 
     client = get_chroma_client()
-    # Using the default embedding function
-    collection = client.get_or_create_collection(name=COLLECTION_NAME)
+    
+    from chromadb.utils.embedding_functions import GoogleGenerativeAiEmbeddingFunction, DefaultEmbeddingFunction
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    ef = GoogleGenerativeAiEmbeddingFunction(api_key=api_key) if api_key else DefaultEmbeddingFunction()
+    
+    # Using the cloud embedding function
+    collection = client.get_or_create_collection(name=COLLECTION_NAME, embedding_function=ef)
     
     # Check existing ids to prevent duplication
     existing = collection.get()
@@ -100,7 +105,11 @@ def retrieve_context(query: str, top_k: int = 1) -> str:
     """
     client = get_chroma_client()
     try:
-        collection = client.get_collection(name=COLLECTION_NAME)
+        from chromadb.utils.embedding_functions import GoogleGenerativeAiEmbeddingFunction, DefaultEmbeddingFunction
+        api_key = os.getenv("GEMINI_API_KEY", "")
+        ef = GoogleGenerativeAiEmbeddingFunction(api_key=api_key) if api_key else DefaultEmbeddingFunction()
+        
+        collection = client.get_collection(name=COLLECTION_NAME, embedding_function=ef)
     except Exception:
         return "Knowledge base not initialized. Please run ingest_vector_store.py first."
 

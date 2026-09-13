@@ -25,8 +25,12 @@ SEMANTIC_PROTOTYPES = [
     "Meaning of large excess rainfall."
 ]
 
-# Initialize embedding function
-ef = DefaultEmbeddingFunction()
+import os
+from chromadb.utils.embedding_functions import GoogleGenerativeAiEmbeddingFunction
+
+# Initialize embedding function using cloud API to save RAM
+api_key = os.getenv("GEMINI_API_KEY", "")
+ef = GoogleGenerativeAiEmbeddingFunction(api_key=api_key) if api_key else DefaultEmbeddingFunction()
 
 # Pre-compute embeddings for prototypes
 try:
