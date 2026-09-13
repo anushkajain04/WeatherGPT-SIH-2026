@@ -18,10 +18,13 @@ COLLECTION_NAME = "weathergpt_knowledge"
 
 # Initialize Reranker globally so it's only loaded once
 reranker = None
-try:
-    reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", max_length=512)
-except Exception as e:
-    print(f"Warning: Failed to load cross-encoder: {e}")
+if os.getenv("DISABLE_RERANKER") != "1":
+    try:
+        reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", max_length=512)
+    except Exception as e:
+        print(f"Warning: Failed to load cross-encoder: {e}")
+else:
+    print("Notice: Reranker is disabled via environment variable (memory saving mode).")
 
 def get_chroma_client():
     return chromadb.PersistentClient(path=str(CHROMA_DB_DIR))
