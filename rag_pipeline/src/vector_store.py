@@ -53,7 +53,7 @@ def ingest_documents():
         def __init__(self, api_key: str):
             from langchain_google_genai import GoogleGenerativeAIEmbeddings
             self.embeddings = GoogleGenerativeAIEmbeddings(
-                model="models/embedding-001", 
+                model="models/text-embedding-004", 
                 google_api_key=api_key
             )
 
@@ -127,7 +127,7 @@ def retrieve_context(query: str, top_k: int = 1) -> str:
             def __init__(self, api_key: str):
                 from langchain_google_genai import GoogleGenerativeAIEmbeddings
                 self.embeddings = GoogleGenerativeAIEmbeddings(
-                    model="models/embedding-001", 
+                    model="models/text-embedding-004", 
                     google_api_key=api_key
                 )
 
