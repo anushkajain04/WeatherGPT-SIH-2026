@@ -22,6 +22,7 @@ SEMANTIC_PROTOTYPES = [
     "How should I stay safe during a flood?",
     "What is the definition of a cold wave?",
     "General cyclone preparedness guidelines.",
+]
 import os
 from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
 
