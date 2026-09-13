@@ -47,9 +47,25 @@ def ingest_documents():
 
     client = get_chroma_client()
     
-    from chromadb.utils.embedding_functions import GoogleGenerativeAiEmbeddingFunction, DefaultEmbeddingFunction
+    from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
+
+    class LangchainGeminiEmbeddingFunction(EmbeddingFunction):
+        def __init__(self, api_key: str):
+            from langchain_google_genai import GoogleGenerativeAIEmbeddings
+            self.embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/embedding-001", 
+                google_api_key=api_key
+            )
+
+        def __call__(self, input: Documents) -> Embeddings:
+            return self.embeddings.embed_documents(input)
+
     api_key = os.getenv("GEMINI_API_KEY", "")
-    ef = GoogleGenerativeAiEmbeddingFunction(api_key=api_key) if api_key else DefaultEmbeddingFunction()
+    if api_key:
+        ef = LangchainGeminiEmbeddingFunction(api_key=api_key)
+    else:
+        from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+        ef = DefaultEmbeddingFunction()
     
     # Using the cloud embedding function
     collection = client.get_or_create_collection(name=COLLECTION_NAME, embedding_function=ef)
@@ -105,9 +121,25 @@ def retrieve_context(query: str, top_k: int = 1) -> str:
     """
     client = get_chroma_client()
     try:
-        from chromadb.utils.embedding_functions import GoogleGenerativeAiEmbeddingFunction, DefaultEmbeddingFunction
+        from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
+
+        class LangchainGeminiEmbeddingFunction(EmbeddingFunction):
+            def __init__(self, api_key: str):
+                from langchain_google_genai import GoogleGenerativeAIEmbeddings
+                self.embeddings = GoogleGenerativeAIEmbeddings(
+                    model="models/embedding-001", 
+                    google_api_key=api_key
+                )
+
+            def __call__(self, input: Documents) -> Embeddings:
+                return self.embeddings.embed_documents(input)
+
         api_key = os.getenv("GEMINI_API_KEY", "")
-        ef = GoogleGenerativeAiEmbeddingFunction(api_key=api_key) if api_key else DefaultEmbeddingFunction()
+        if api_key:
+            ef = LangchainGeminiEmbeddingFunction(api_key=api_key)
+        else:
+            from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+            ef = DefaultEmbeddingFunction()
         
         collection = client.get_collection(name=COLLECTION_NAME, embedding_function=ef)
     except Exception:

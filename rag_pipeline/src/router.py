@@ -22,15 +22,28 @@ SEMANTIC_PROTOTYPES = [
     "How should I stay safe during a flood?",
     "What is the definition of a cold wave?",
     "General cyclone preparedness guidelines.",
-    "Meaning of large excess rainfall."
-]
-
 import os
-from chromadb.utils.embedding_functions import GoogleGenerativeAiEmbeddingFunction
+from chromadb.api.types import Documents, EmbeddingFunction, Embeddings
+
+class LangchainGeminiEmbeddingFunction(EmbeddingFunction):
+    def __init__(self, api_key: str):
+        # Import inside to avoid issues if not used
+        from langchain_google_genai import GoogleGenerativeAIEmbeddings
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001", 
+            google_api_key=api_key
+        )
+
+    def __call__(self, input: Documents) -> Embeddings:
+        return self.embeddings.embed_documents(input)
 
 # Initialize embedding function using cloud API to save RAM
 api_key = os.getenv("GEMINI_API_KEY", "")
-ef = GoogleGenerativeAiEmbeddingFunction(api_key=api_key) if api_key else DefaultEmbeddingFunction()
+if api_key:
+    ef = LangchainGeminiEmbeddingFunction(api_key=api_key)
+else:
+    from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+    ef = DefaultEmbeddingFunction()
 
 # Pre-compute embeddings for prototypes
 try:
