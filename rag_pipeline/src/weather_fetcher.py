@@ -64,9 +64,26 @@ def fetch_weather(role: str, lat: float, lon: float, location_name: str, day_ref
         params["current"].extend(["precipitation", "visibility"])
         params["daily"].append("precipitation_sum") # Already included above, but we can just let API handle it.
 
-    response = requests.get(base_url, params=params)
-    response.raise_for_status()
-    data = response.json()
+    try:
+        response = requests.get(base_url, params=params)
+        response.raise_for_status()
+        data = response.json()
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:
+            return {
+                "raw_data": {},
+                "nl_template": f"The weather service is currently experiencing high traffic and is temporarily unavailable for {location_name}. Please try again in a few minutes."
+            }
+        else:
+            return {
+                "raw_data": {},
+                "nl_template": f"An error occurred while fetching weather data for {location_name}: {str(e)}"
+            }
+    except Exception as e:
+        return {
+            "raw_data": {},
+            "nl_template": f"An unexpected error occurred while fetching weather data for {location_name}."
+        }
     
     # Today's local date based on system (or we could use current data time, but system today is fine for offsets)
     # Open-Meteo timezone="auto" aligns with the location's local time.

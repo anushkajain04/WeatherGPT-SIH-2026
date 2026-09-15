@@ -46,8 +46,17 @@ def resolve_location(place_name: str):
         
     # 2. Fall back to geocoding
     params = {"name": place_name, "count": 1, "language": "en", "format": "json"}
-    r = requests.get(GEOCODING_URL, params=params, timeout=8)
-    r.raise_for_status()
+    try:
+        r = requests.get(GEOCODING_URL, params=params, timeout=8)
+        r.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 429:
+            # Propagate a soft failure so it gets caught gracefully
+            return None
+        return None
+    except Exception:
+        return None
+        
     data = r.json()
     results = data.get("results")
     if not results:
