@@ -28,6 +28,15 @@ def verify_api_key(x_internal_api_key: Optional[str] = Header(None)):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return x_internal_api_key
 
+import asyncio
+from src.vector_store import ingest_documents
+
+@app.on_event("startup")
+async def startup_event():
+    # Run ingestion asynchronously so it doesn't block Render's port binding!
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, ingest_documents)
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
