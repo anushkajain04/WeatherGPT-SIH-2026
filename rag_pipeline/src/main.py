@@ -6,7 +6,7 @@ import traceback
 
 import config
 from src.router import route_query
-from src.location import geocode_location
+from src.location import resolve_location
 from src.pipeline import run_pipeline
 
 app = FastAPI(title="WeatherGPT API")
@@ -42,7 +42,7 @@ def chat_endpoint(request: ChatRequest, api_key: str = Depends(verify_api_key)):
             if not request.location:
                 raise HTTPException(status_code=400, detail="Location is required for structured weather queries.")
             
-            geo = geocode_location(request.location)
+            geo = resolve_location(request.location)
             if not geo:
                 raise HTTPException(status_code=400, detail=f"Could not geocode location: {request.location}")
             location_resolved = geo["name"]

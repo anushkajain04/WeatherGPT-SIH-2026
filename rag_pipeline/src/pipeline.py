@@ -11,7 +11,7 @@ from src.router import route_query
 from src.weather_fetcher import fetch_weather
 from src.vector_store import retrieve_context
 from src.prompt_templates import build_prompt
-from src.location import geocode_location
+from src.location import resolve_location
 from src.llm_client import generate_answer
 from src.date_utils import resolve_day_reference
 
@@ -29,7 +29,7 @@ def run_pipeline(query: str, role: str = "normal_user", requested_location: Opti
     
     if lane == "structured":
         loc_name = requested_location if requested_location else "New Delhi"
-        geo = geocode_location(loc_name)
+        geo = resolve_location(loc_name)
         
         if geo:
             data_location = geo["name"]

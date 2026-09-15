@@ -42,6 +42,25 @@ from typing import Optional
 from src.token_utils import truncate_to_budget
 import config
 
+def _mentioned_location_differs(query: str, data_location: str) -> Optional[str]:
+    """
+    Compares the query text against data_location using a hardcoded city list.
+    Returns the mismatched city name if found, else None.
+    """
+    if not data_location:
+        return None
+        
+    cities = ["new delhi", "delhi", "mumbai", "chennai", "kolkata", "bangalore", "ludhiana", "pune", "hyderabad", "jaipur"]
+    query_lower = query.lower()
+    data_loc_lower = data_location.lower()
+    
+    for city in cities:
+        if city in query_lower:
+            # If the data location is 'your location' or doesn't match the city found in query
+            if data_loc_lower == "your location" or city not in data_loc_lower:
+                return city.title()
+    return None
+
 def build_prompt(query: str, role: str, context: str, requested_location: Optional[str] = None, data_location: Optional[str] = None, max_context_tokens: int = None) -> str:
     """
     Assemble the full prompt text as a single string, for inspection.
@@ -54,7 +73,16 @@ def build_prompt(query: str, role: str, context: str, requested_location: Option
     persona = ROLE_PERSONAS.get(role, ROLE_PERSONAS["normal_user"])
 
     location_note = ""
-    if requested_location and data_location and requested_location.lower() != data_location.lower():
+    mismatched_city = _mentioned_location_differs(query, data_location)
+    
+    if mismatched_city:
+        location_note = (
+            f"\nNote: the user asked about {mismatched_city}, but the data below is for "
+            f"{data_location}. If this mismatch matters to the answer, point it out rather than "
+            f"answering as if they're the same place.\n"
+        )
+    elif requested_location and data_location and data_location != "your location" and requested_location.lower() != data_location.lower():
+        # Fallback to the original direct comparison just in case
         location_note = (
             f"\nNote: the user asked about {requested_location}, but the data below is for "
             f"{data_location}. If this mismatch matters to the answer, point it out rather than "
