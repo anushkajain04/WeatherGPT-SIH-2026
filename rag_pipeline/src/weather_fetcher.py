@@ -38,7 +38,27 @@ def fetch_weather(role: str, lat: float, lon: float, location_name: str, day_ref
     """
     if day_reference is None:
         day_reference = {"type": "single_day", "offset": 0}
+        
+    # Convert day_reference to a tuple of sorted items to make it hashable for caching
+    day_ref_tuple = tuple(sorted(day_reference.items()))
+    
+    before_info = _fetch_weather_cached.cache_info()
+    res = _fetch_weather_cached(role, lat, lon, location_name, day_ref_tuple)
+    after_info = _fetch_weather_cached.cache_info()
+    
+    if after_info.hits > before_info.hits:
+        print(f"CACHE HIT: fetch_weather for {location_name}")
+    else:
+        print(f"CACHE MISS: fetch_weather for {location_name}")
+        
+    return res
 
+from functools import lru_cache
+
+@lru_cache(maxsize=256)
+def _fetch_weather_cached(role: str, lat: float, lon: float, location_name: str, day_ref_tuple: tuple) -> Dict[str, Any]:
+    day_reference = dict(day_ref_tuple)
+    
     # Handle out of range immediately
     if day_reference.get("type") == "out_of_range":
         return {
@@ -65,11 +85,13 @@ def fetch_weather(role: str, lat: float, lon: float, location_name: str, day_ref
         params["daily"].append("precipitation_sum") # Already included above, but we can just let API handle it.
 
     try:
+        print(f"OPEN-METEO REQUEST: Fetching weather for {location_name} ({lat}, {lon})")
         response = requests.get(base_url, params=params)
         response.raise_for_status()
         data = response.json()
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 429:
+            print(f"OPEN-METEO 429: Rate limit hit for {location_name}")
             return {
                 "raw_data": {},
                 "nl_template": f"The weather service is currently experiencing high traffic and is temporarily unavailable for {location_name}. Please try again in a few minutes."

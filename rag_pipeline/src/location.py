@@ -15,8 +15,22 @@ GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 
 
 import re
+from functools import lru_cache
 
 def resolve_location(place_name: str):
+    before_info = _resolve_location_cached.cache_info()
+    res = _resolve_location_cached(place_name)
+    after_info = _resolve_location_cached.cache_info()
+    
+    if after_info.hits > before_info.hits:
+        print(f"CACHE HIT: resolve_location for {place_name}")
+    else:
+        print(f"CACHE MISS: resolve_location for {place_name}")
+        
+    return res
+
+@lru_cache(maxsize=256)
+def _resolve_location_cached(place_name: str):
     """
     Resolve a place name to coordinates, OR parse raw coordinates directly.
     
@@ -47,10 +61,12 @@ def resolve_location(place_name: str):
     # 2. Fall back to geocoding
     params = {"name": place_name, "count": 1, "language": "en", "format": "json"}
     try:
+        print(f"OPEN-METEO REQUEST: Geocoding {place_name}")
         r = requests.get(GEOCODING_URL, params=params, timeout=8)
         r.raise_for_status()
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 429:
+            print(f"OPEN-METEO 429: Rate limit hit geocoding {place_name}")
             # Propagate a soft failure so it gets caught gracefully
             return None
         return None
