@@ -1,0 +1,39 @@
+{
+  "name": "weathergpt-backend",
+  "version": "1.0.0",
+  "description": "Production-ready multilingual Express backend for WeatherGPT",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "compression": "^1.8.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "multer": "^1.4.5-lts.1",
+    "pino": "^9.6.0",
+    "pino-http": "^10.4.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "pino-pretty": "^13.0.0"
+  },
+  "keywords": [
+    "weathergpt",
+    "express",
+    "bhashini",
+    "multilingual",
+    "rag"
+  ],
+  "author": "",
+  "license": "ISC"
+}
