@@ -1,0 +1,10 @@
+const express = require('express');
+const app = express();
+const cors = require('cors');
+const notificationRoutes = require('./routes/notification.route');
+const weatherRoutes = require('./routes/weather.route');
+app.use(cors());
+app.use(express.json());
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/weather', weatherRoutes);
+module.exports = app;
