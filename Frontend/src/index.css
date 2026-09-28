@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- Design tokens (light + dark) ---------- */
+:root {
+  --navy: #173b7e; --navy-dark: #0f2b5c; --saffron: #f5a623; --saffron-dark: #c9820f;
+  --bg: #f4f6f9; --card: #ffffff; --ink: #14213d; --sub: #5a6b8c; --line: #e2e7f0;
+  --ok: #1d8a4c; --warn: #c9820f; --danger: #c0392b;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) { --bg: #0e1526; --card: #161f35; --ink: #edf1fa; --sub: #93a1c4; --line: #26314f; }
+}
+:root[data-theme='dark'] { --bg: #0e1526; --card: #161f35; --ink: #edf1fa; --sub: #93a1c4; --line: #26314f; }
+
+@layer base {
+  html, body {
+    background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+    scroll-padding-top: env(safe-area-inset-top, 0px);
+  }
+  html { font-size: clamp(15px, 14.2px + 0.2vw, 17px); }
+  body { margin: 0; min-height: 100%; overflow-x: hidden; -webkit-text-size-adjust: 100%; }
+  input, select { font-size: 1rem; }
+  input[type='text'], input[type='tel'], input[type='email'], select {
+    background: var(--card); color: var(--ink); border: 1px solid var(--line);
+  }
+  input::placeholder { color: var(--sub); }
+}
+
+@layer components {
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; }
+  .tap { min-height: 48px; }
+  .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
+  .fade-in { animation: fadeIn 0.18s ease-out; }
+  .listening { animation: pulse-ring 1.1s ease-out infinite; }
+}
+
+/* Main page is scaled so it sits at the same visual size as the login page */
+.zoom-main { zoom: 0.9; }
+@media (min-width: 1024px) {
+  .zoom-main { zoom: 0.78; }
+  .chat-dock-accent { border: 1.5px solid var(--saffron); box-shadow: 0 10px 32px rgba(20, 33, 61, 0.25); }
+}
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(192, 57, 43, 0.35); } 100% { box-shadow: 0 0 0 22px rgba(192, 57, 43, 0); } }
