@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 
 import env from './config/env.js';
 import requestIdMiddleware from './middleware/request-id.middleware.js';
@@ -11,13 +12,17 @@ import { NotFoundError } from './utils/errors.js';
 import healthRouter from './routes/health.routes.js';
 import chatRouter from './routes/chat.routes.js';
 import ttsRouter from './routes/tts.routes.js';
+import authRouter from './routes/auth.routes.js';
 
 export const app = express();
+
+// Trust reverse proxy (Render) so rate limiters and loggers key on actual client IP
+app.set('trust proxy', 1);
 
 // 1. Security Headers via Helmet
 app.use(helmet());
 
-// 2. CORS restricted strictly to parsed allowlist (never wildcard)
+// 2. CORS restricted strictly to parsed allowlist (never wildcard) with credentials and X-Requested-With
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -33,17 +38,25 @@ app.use(
       return callback(corsError);
     },
     credentials: true,
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-API-Key', 'Accept'],
+    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Request-ID',
+      'X-API-Key',
+      'X-Requested-With',
+      'Accept',
+    ],
   })
 );
 
 // 3. Response Compression
 app.use(compression());
 
-// 4. Request Body Parsing (strictly capped at 10KB to prevent payload flooding)
+// 4. Request Body & Cookie Parsing (strictly capped at 10KB to prevent payload flooding)
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(cookieParser());
 
 // 5. Request Tracking (UUID and contextual child logger)
 app.use(requestIdMiddleware);
@@ -52,6 +65,7 @@ app.use(requestIdMiddleware);
 app.use('/api', healthRouter);
 app.use('/api', chatRouter);
 app.use('/api', ttsRouter);
+app.use('/api/auth', authRouter);
 
 // 7. 404 Fallback for unmatched routes
 app.use((req, res, next) => {
@@ -62,4 +76,3 @@ app.use((req, res, next) => {
 app.use(errorHandler);
 
 export default app;
-

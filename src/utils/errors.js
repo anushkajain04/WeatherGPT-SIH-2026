@@ -46,6 +46,18 @@ export class AuthError extends AppError {
   }
 }
 
+export class ForbiddenError extends AppError {
+  constructor(message = 'Forbidden') {
+    super(message, 403, 'FORBIDDEN');
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message = 'Conflict', details = null) {
+    super(message, 409, 'CONFLICT', details);
+  }
+}
+
 export class RateLimitError extends AppError {
   constructor(message = 'Too many requests. Please slow down and try again later.') {
     super(message, 429, 'RATE_LIMIT_EXCEEDED');

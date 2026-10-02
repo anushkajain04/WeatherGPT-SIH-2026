@@ -1,71 +1,41 @@
 # WeatherGPT Express Backend
 
-Production-ready, highly modular Express backend (Node 20+, ESM) for **WeatherGPT**, a multilingual weather assistant powered by an upstream Python RAG service and Bhashini AI services (ASR, NMT, TTS, TLD, Transliteration).
+Production-ready, highly modular Express backend (Node 20+, ESM) for **WeatherGPT**, a multilingual weather assistant powered by an upstream Python RAG service, Bhashini AI services (ASR, NMT, TTS, TLD, Transliteration), and a secure passwordless OTP authentication system (email and Indian mobile numbers) with MongoDB Atlas and JWT sessions.
 
 ---
 
 ## Architecture Overview
 
 ```
-User Request (Voice/Text)
+User Request (Voice/Text/Auth)
           │
           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                      Express Gateway                        │
 │  Helmet · CORS (Strict Allowlist) · Body Cap (10KB)         │
-│  Rate Limiter (20 req / 15m) · Request ID Tracking          │
+│  Trust Proxy (1) · Cookie Parser · Request ID Tracking      │
 └──────────────────────────────┬──────────────────────────────┘
                                │
-                ┌──────────────┴──────────────┐
-                ▼                             ▼
-        POST /api/chat               POST /api/chat/voice
-                │                             │
-                │                     Multer Memory (5MB)
-                │                             │
-                │                             ▼
-                │                    Bhashini ASR (Speech-to-Text)
-                │                    (sourceLanguage required)
-                │                             │
-                └──────────────┬──────────────┘
-                               │
-                               ▼
-        ┌──────────────────────────────────────────────┐
-        │          Language Resolution Pipeline        │
-        │  1. Explicit Language Parameter              │
-        │  2. Bhashini TLD (Native Script)             │
-        │  3. Romanized Keyword Heuristic (Hinglish)   │
-        │  4. Fallback: English ('en')                 │
-        └──────────────────────┬───────────────────────┘
-                               │
-                               ▼
-        ┌──────────────────────────────────────────────┐
-        │        Session Context & Follow-Up Rewrite   │
-        │  Anchor short follow-ups to prior location  │
-        │  (Preserves Latin location for geocoding)    │
-        └──────────────────────┬───────────────────────┘
-                               │
-                               ▼
-        ┌──────────────────────────────────────────────┐
-        │         Bhashini NMT (Input Translation)     │
-        │  Translates query to English (skip if 'en')  │
-        └──────────────────────┬───────────────────────┘
-                               │
-                               ▼
-        ┌──────────────────────────────────────────────┐
-        │          Upstream Python RAG Service         │
-        │  Adaptive Timeout: 65s (Cold) / 10s (Warm)   │
-        │  10-minute Answer Cache · X-Internal-API-Key │
-        └──────────────────────┬───────────────────────┘
-                               │
-                               ▼
-        ┌──────────────────────────────────────────────┐
-        │        Bhashini NMT (Output Translation)     │
-        │  Translates answer to user's native language │
-        │  *Graceful degradation to English on failure │
-        └──────────────────────┬───────────────────────┘
-                               │
-                               ▼
-        Client Response: { answer, answerEnglish, timings, ... }
+       ┌───────────────────────┼───────────────────────┐
+       ▼                       ▼                       ▼
+POST /api/chat         POST /api/chat/voice     /api/auth/*
+       │                       │                       │
+       │               Multer Memory (5MB)      ┌──────┴──────┐
+       │                       │                ▼             ▼
+       │               Bhashini ASR      OTP (Email/SMS)  JWT Cookie
+       │                       │         (5m exp, 1h cap) (wgpt_session)
+       └──────────────┬────────┘                │             │
+                      │                         └──────┬──────┘
+                      ▼                                │
+      ┌───────────────────────────────┐                │
+      │  Language Resolution Pipeline │                │
+      └──────────────┬────────────────┘                │
+                      ▼                                ▼
+      ┌───────────────────────────────┐        ┌──────────────┐
+      │  Upstream Python RAG Service  │        │ requireAuth  │
+      └──────────────┬────────────────┘        └──────────────┘
+                      ▼
+      Client Response: { answer, answerEnglish, timings, ... }
 ```
 
 ---
@@ -73,12 +43,20 @@ User Request (Voice/Text)
 ## Key Features
 
 1. **Strict Single-Responsibility Architecture**: Every concern has its own dedicated file under `src/config`, `src/services`, `src/controllers`, `src/routes`, `src/validators`, `src/middleware`, and `src/utils`.
-2. **Zero Monolithic Logic**: Clean separation between routing, validation, business logic, and error handling.
-3. **Bhashini Service ID Caching**: Config responses are cached for 24 hours via `CacheService` to prevent redundant network round-trips and halve latency.
-4. **Adaptive Cold-Start Timeouts**: Automatically switches between a 65s cold-start timeout and a 10s warm timeout for Render's free tier.
-5. **Graceful Subsystem Degradation**: If output translation fails, the client receives the English answer along with `translationFailed: true`, rather than failing the weather query.
-6. **Location Integrity**: Geolocation strings remain in Latin script and are never passed through translation to prevent geocoder rejection.
-7. **Strict Security & Redaction**: Structured Pino logs redact all authorization headers, internal keys, and secrets. Wildcard CORS is prohibited.
+2. **Passwordless OTP Authentication**:
+   - Supports email and 10-digit Indian phone numbers (`+91XXXXXXXXXX`).
+   - One user account holds both email and phone without account merging.
+   - Dual partial unique indexes (`partialFilterExpression: { $type: 'string' }`) synchronized on startup.
+   - 1-hour document retention via MongoDB TTL with 5-minute code expiration, 30s resend cooldown, and 5-per-hour send limit.
+   - Timing-safe HMAC-SHA256 OTP verification. Code is never logged or returned.
+3. **JWT Session Management & CSRF Defense**:
+   - Signed with HS256, 7-day expiry, user ID as `sub`.
+   - Stored in an `httpOnly` cookie (`wgpt_session`) with configurable `sameSite` and forced `secure` mode when `SameSite=None`.
+   - Reusable `csrfHeaderMiddleware` requiring `X-Requested-With: WeatherGPT` on state-changing requests (`POST`, `PATCH`, `DELETE`).
+4. **Bhashini Service ID Caching**: Config responses cached for 24 hours to prevent redundant network round-trips and halve latency.
+5. **Adaptive Cold-Start Timeouts**: Automatically switches between a 65s cold-start timeout and a 10s warm timeout for Render's free tier.
+6. **Graceful Subsystem Degradation**: If output translation fails, the client receives the English answer with `translationFailed: true` rather than failing the weather query.
+7. **Strict Security & Redaction**: Structured Pino logs redact all authorization headers, internal keys, secrets, cookies, tokens, contacts, and OTPs. Wildcard CORS is prohibited.
 
 ---
 
@@ -91,27 +69,42 @@ User Request (Voice/Text)
 ├── package.json
 ├── README.md
 └── src/
-    ├── server.js                          # Server entry point & graceful shutdown
-    ├── app.js                             # Express application assembly & middleware wiring
+    ├── server.js                          # Server entry point & DB connection & graceful shutdown
+    ├── app.js                             # Express application assembly, middleware & route wiring
     ├── config/
     │   ├── constants.js                   # Centralized pipeline IDs, endpoints, timeouts, languages
+    │   ├── db.js                          # Mongoose connection & index synchronization
     │   ├── env.js                         # Zod-validated environment configuration (fails loudly on boot)
     │   └── romanized-keywords.js          # Hinglish stopword dictionary & detection heuristic
     ├── controllers/
+    │   ├── auth.controller.js             # Passwordless OTP, profile, session, and contact linking
     │   ├── chat.controller.js             # Text and voice chat orchestration
     │   ├── health.controller.js           # Liveness and subsystem status checks
     │   └── tts.controller.js              # On-demand speech synthesis delivery
     ├── middleware/
-    │   ├── auth.middleware.js             # Optional client API key enforcement
+    │   ├── auth.middleware.js             # Optional client API key enforcement (non-auth routes)
+    │   ├── csrf-header.middleware.js      # X-Requested-With: WeatherGPT enforcement on mutating routes
     │   ├── error-handler.middleware.js    # Centralized error mapping and secret sanitization
-    │   ├── rate-limit.middleware.js       # IP rate limiting (20 requests / 15 mins)
+    │   ├── otp-rate-limit.middleware.js   # IP rate limiting on OTP endpoints
+    │   ├── rate-limit.middleware.js       # IP rate limiting on chat endpoints
     │   ├── request-id.middleware.js       # Request UUID and child logger attachment
+    │   ├── require-auth.middleware.js     # Session cookie verification & req.user attachment
     │   └── validate.middleware.js         # Generic Zod validation middleware
+    ├── models/
+    │   ├── otp.model.js                   # OTP schema with 1h TTL index & 5m code expiry
+    │   └── user.model.js                  # User schema with partial unique indexes on email & phone
     ├── routes/
+    │   ├── auth.routes.js                 # POST /otp/request, /otp/verify, GET/PATCH /me, /logout, /link/*
     │   ├── chat.routes.js                 # POST /api/chat, POST /api/chat/voice
     │   ├── health.routes.js               # GET /api/health, GET /api/status
     │   └── tts.routes.js                  # POST /api/tts
     ├── services/
+    │   ├── auth/
+    │   │   ├── email.service.js           # Nodemailer SMTP & dev console driver
+    │   │   ├── otp.service.js             # Crypto randomInt OTP generator & timingSafeEqual verifier
+    │   │   ├── sms.service.js             # SMS provider interface & stub throwing not-configured
+    │   │   ├── token.service.js           # HS256 JWT session signer & verifier
+    │   │   └── user.service.js            # User lifecycle, profile update & dual-check contact linking
     │   ├── bhashini/
     │   │   ├── asr.service.js             # Speech-to-text with valid empty source string
     │   │   ├── config.service.js          # Pipeline config resolution with 24h caching
@@ -124,10 +117,12 @@ User Request (Voice/Text)
     │   ├── rag.service.js                 # Upstream Python RAG client with adaptive timeouts
     │   └── session.service.js             # Contextual session store & follow-up query rewriter
     ├── utils/
-    │   ├── errors.js                      # Subsystem-specific typed error classes
+    │   ├── contact.js                     # Canonical email & Indian phone (+91) normalizer
+    │   ├── errors.js                      # Subsystem-specific typed error classes (Conflict, Forbidden, etc.)
     │   ├── http-client.js                 # AbortController fetch wrapper with single retry
-    │   └── logger.js                      # Pino logger with credential & header redaction
+    │   └── logger.js                      # Pino logger with nested credential & contact redaction
     └── validators/
+        ├── auth.validator.js              # Zod schemas for OTP, profile, and link requests
         ├── chat.validator.js              # Zod schemas for chat and voice inputs
         └── tts.validator.js               # Zod schemas for text-to-speech requests
 ```
@@ -136,7 +131,7 @@ User Request (Voice/Text)
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and provide the required credentials:
+Copy `.env.example` to `.env` and configure:
 
 ```bash
 cp .env.example .env
@@ -146,145 +141,240 @@ cp .env.example .env
 |---|---|---|---|
 | `PORT` | No | `3000` | Port for Express server |
 | `NODE_ENV` | No | `development` | `development`, `production`, or `test` |
-| `ALLOWED_ORIGINS` | **Yes** | — | Comma-separated list of allowed origins (e.g. `http://localhost:3000,http://localhost:5173`) |
-| `CLIENT_API_KEY` | No | — | Optional API key required in `x-api-key` header |
+| `ALLOWED_ORIGINS` | **Yes** | — | Comma-separated allowlist of origins (never wildcard) |
+| `MONGODB_URI` | **Yes** | — | MongoDB Atlas connection string |
+| `JWT_SECRET` | **Yes** | — | Secret for signing session JWTs (minimum 32 characters) |
+| `OTP_HASH_SECRET` | **Yes** | — | Secret for HMAC-SHA256 OTP hashing (minimum 32 characters) |
+| `COOKIE_SAME_SITE` | No | `lax` | `lax`, `strict`, or `none` (cross-domain) |
+| `COOKIE_SECURE` | No | `false` | `true` or `false` (forced `true` if `COOKIE_SAME_SITE=none`) |
+| `MAIL_PROVIDER` | No | `console` | `console` (dev only) or `smtp`. Refuses boot if `console` in production |
+| `SMS_PROVIDER` | No | `console` | `console` (dev only) or `custom`. Refuses boot if `console` in production |
+| `SMTP_HOST` | If `smtp` | — | SMTP hostname |
+| `SMTP_PORT` | If `smtp` | `587` | SMTP port |
+| `SMTP_USER` | If `smtp` | — | SMTP username |
+| `SMTP_PASS` | If `smtp` | — | SMTP password |
+| `EMAIL_FROM` | No | `WeatherGPT <noreply@weathergpt.local>` | From email address header |
 | `RAG_BASE_URL` | **Yes** | — | Base URL of upstream Python RAG service |
 | `RAG_API_KEY` | **Yes** | — | Internal secret key sent in `X-Internal-API-Key` |
 | `BHASHINI_UDYAT_KEY` | **Yes** | — | Bhashini Udyat key sent in `ulcaApiKey` header |
 | `BHASHINI_INFERENCE_KEY` | **Yes** | — | Bhashini Inference key sent in `Authorization` header |
 | `CHAT_RATE_LIMIT_WINDOW_MS` | No | `900000` (15m) | Window in ms for chat rate limiter |
-| `CHAT_RATE_LIMIT_MAX` | No | `20` | Max requests per IP within the window |
+| `CHAT_RATE_LIMIT_MAX` | No | `20` | Max chat requests per IP within the window |
 | `RAG_COLD_TIMEOUT_MS` | No | `65000` (65s) | Timeout for first or cold-started RAG request |
 | `RAG_WARM_TIMEOUT_MS` | No | `10000` (10s) | Timeout for subsequent warm RAG requests |
 | `KEEP_WARM` | No | `false` | When `true`, pings `{RAG_BASE_URL}/health` every 10 mins |
+| `CLIENT_API_KEY` | No | — | Optional internal API key for legacy services |
 
 ---
 
-## Language Resolution Flow & Heuristic
+## Authentication Subsystem
 
-Bhashini's Text Language Detection (TLD) API exhibits a known platform characteristic: **any Latin-script input is classified as English (`en`)**, even when the content represents Romanized Indic languages such as Hinglish (e.g., *"aaj mausam kaisa hai"*).
+### 1. Contact Normalization
+- **Email**: Trimmed, lowercased, validated against standard email format.
+- **Indian Phone Numbers**: Accepts 10 digits starting with 6–9 with optional `+91`, `91`, or `0` prefix. Spaces and hyphens are stripped. Output is strictly normalized to `+91XXXXXXXXXX`.
+- **Validation**: Any unsupported or malformed contact returns a `422 ValidationError`.
 
-To provide accurate language resolution:
+### 2. OTP Security & Rate Limiting
+- **Generation**: 6-digit numeric code generated with `crypto.randomInt` (never `Math.random`).
+- **Hashing**: HMAC-SHA256 keyed with `OTP_HASH_SECRET`.
+- **Verification**: Constant-time comparison using `crypto.timingSafeEqual`.
+- **Hourly Cap & Retention**: The OTP document lives for 1 hour in MongoDB via TTL (`expiresAt`). Code validity (`otpExpiresAt`) is 5 minutes.
+  - Max 5 verify attempts; after 5 attempts, the code is invalidated.
+  - 30-second cooldown between requests.
+  - Max 5 requests per contact per hour, retained even after code expiration or successful verification.
+- **Zero Leakage**: The OTP code is never logged, stored in plaintext, or included in any API response.
 
-1. **Explicit Language Flag**: If the client provides `language: "hi"`, it overrides all detection and sets confidence to `'explicit'`.
-2. **Bhashini TLD**: For native Indic script (e.g., Devanagari, Bengali), TLD returns high-confidence predictions (`'high'`).
-3. **Romanized Keyword Heuristic**: If TLD returns `en`, the text is evaluated against `src/config/romanized-keywords.js`. If Romanized Indic keywords (e.g., *baarish*, *mausam*, *hoga*, *thand*) are matched, the system resolves the language to `'hi'` with confidence `'heuristic'`.
-4. **Fallback**: If no heuristic matches, the language defaults to `'en'` with confidence `'fallback'`.
+### 3. Session Management & Cookies
+- Successful verification issues an HS256 JWT containing only the user ID as subject (`sub`), valid for 7 days.
+- Stored in an `httpOnly` cookie named `wgpt_session`.
+- On logout, the cookie is cleared using the exact same `path`, `httpOnly`, `sameSite`, and `secure` options.
 
-Both `detectedLanguage` and `languageConfidence` are returned to the client so that frontend interfaces can show what was detected and allow manual correction.
+### 4. CSRF Protection
+- All mutating requests (`POST`, `PATCH`, `DELETE`) under `/api/auth` require the custom header:
+  ```http
+  X-Requested-With: WeatherGPT
+  ```
+- Missing or invalid headers result in a `403 ForbiddenError`.
 
 ---
 
-## ASR Voice Input Requirement
+## Authentication Endpoints (`/api/auth`)
 
-Because ASR models require an acoustic model specific to the spoken language and cannot automatically detect the language from raw audio, the `POST /api/chat/voice` endpoint **requires an explicit `language` field** in the request body alongside the audio file upload.
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/otp/request` | No | Request login/registration OTP. Generic response prevents account enumeration. |
+| `POST` | `/api/auth/otp/verify` | No | Verify OTP, find or create user, set `wgpt_session` cookie. |
+| `GET` | `/api/auth/me` | Cookie | Get currently authenticated user profile. |
+| `PATCH` | `/api/auth/me` | Cookie | Update profile fields (`role`, `location`, `preferredLanguage`). |
+| `POST` | `/api/auth/logout` | No | Clear `wgpt_session` cookie. |
+| `POST` | `/api/auth/link/request` | Cookie | Request OTP to link secondary contact (phone or email). |
+| `POST` | `/api/auth/link/verify` | Cookie | Verify OTP and link secondary contact to account. |
 
 ---
 
-## API Endpoints
+## Protecting Routes (Guide for Teammates)
 
-### 1. Health Check
-`GET /api/health`
-- Returns local service liveness and a cached check of upstream RAG health.
+To attach authentication to any existing or new route (such as `/api/chat` or `/api/chat/voice`):
 
-### 2. Deep Subsystem Status
-`GET /api/status`
-- Checks connectivity and latency across RAG, Bhashini Config, and Bhashini NMT for debugging and monitoring.
+1. Import the reusable `requireAuth` middleware:
+   ```javascript
+   import requireAuth from '../middleware/require-auth.middleware.js';
+   ```
 
-### 3. Text Chat
-`POST /api/chat`
-- Request body (`application/json`, max 10KB):
-```json
-{
-  "query": "aaj mumbai me barish hogi kya?",
-  "role": "farmer",
-  "location": "Mumbai",
-  "language": "hi",
-  "sessionId": "user-session-123"
-}
-```
-- Response:
-```json
-{
-  "answer": "आज मुंबई में हल्की बारिश की संभावना है...",
-  "answerEnglish": "Light rain is expected in Mumbai today...",
-  "detectedLanguage": "hi",
-  "languageConfidence": "heuristic",
-  "translationFailed": false,
-  "route": "rag",
-  "model_used": "gemini-1.5-flash",
-  "latency": 1.2,
-  "location_resolved": { "city": "Mumbai", "lat": 19.076, "lon": 72.877 },
-  "timings": {
-    "detect": 12,
-    "rewrite": 1,
-    "translateIn": 240,
-    "rag": 1250,
-    "translateOut": 310,
-    "total": 1813
-  }
-}
-```
+2. Insert `requireAuth` into the route pipeline before the controller:
+   ```javascript
+   // src/routes/chat.routes.js
+   chatRouter.post(
+     '/chat',
+     requireAuth,            // <--- Added here
+     chatRateLimiter,
+     validate(chatBodySchema, 'body'),
+     (req, res, next) => chatController.handleChat(req, res, next)
+   );
+   ```
 
-### 4. Voice Chat
-`POST /api/chat/voice`
-- Multipart form-data:
-  - `audio`: WAV or MP3 file (max 5MB)
-  - `language`: Required language code (e.g. `hi`, `en`, `bn`)
-  - `role`, `location`, `sessionId`: Optional
-- Response includes `transcript` alongside standard chat fields and `asr` latency timing.
-
-### 5. On-Demand Text-to-Speech
-`POST /api/tts`
-- Request body:
-```json
-{
-  "text": "आज मुंबई में बारिश हो सकती है।",
-  "language": "hi",
-  "gender": "female"
-}
-```
-- Response: Binary `audio/wav` stream with `Content-Type: audio/wav` (or JSON with base64 audio if `Accept: application/json` or `?format=json`).
+3. Inside the controller, `req.user` is automatically available:
+   ```javascript
+   const { id, email, phone, role, location, preferredLanguage } = req.user;
+   ```
+   If the session cookie is missing, invalid, or expired, `requireAuth` automatically rejects the request with a standardized `401 Unauthorized` response.
 
 ---
 
 ## Error Contract
 
-Errors are returned in a standardized format:
+Standardized JSON error format:
 
 ```json
 {
   "error": {
-    "code": "LOCATION_UNRESOLVABLE",
-    "message": "Unable to resolve location. Please confirm your city and try again."
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid contact format. Please provide a valid email address or a 10-digit Indian mobile number."
   },
   "reqId": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-### Subsystem Error Mapping:
-- **Upstream RAG 400**: Mapped to `400` asking user to confirm their city.
-- **Upstream RAG 401**: Mapped to generic `502` while logging internal key rejection.
-- **Upstream RAG 503**: Mapped to `503` (*"Our AI systems are currently busy, please try again later."*).
-- **Upstream RAG Timeout**: Mapped to `504` (*"Weather service is waking up, please try again in a few seconds."*).
-- **Bhashini Failures**: Typed per subsystem (`NMT_ERROR`, `ASR_ERROR`, `TTS_ERROR`). If output translation fails after RAG succeeds, the system degrades gracefully and returns the English answer with `translationFailed: true`.
-- **Unsupported Languages**: Non-scheduled languages (such as Bhojpuri `bho`) fail immediately with `422 UNSUPPORTED_LANGUAGE` without redundant retries.
+### Auth Error Codes:
+- `VALIDATION_ERROR` (422): Malformed contact, invalid OTP format, or schema validation failure.
+- `UNAUTHORIZED` (401): Session cookie missing, expired, or invalid.
+- `FORBIDDEN` (403): Missing `X-Requested-With: WeatherGPT` CSRF header.
+- `CONFLICT` (409): Contact is already associated with another account.
+- `RATE_LIMIT_EXCEEDED` (429): Exceeded IP rate limit or 5 OTPs per contact per hour cap.
+- `OTP_DELIVERY_FAILED` (500): Safe message returned when SMS or email delivery fails.
 
 ---
 
-## Getting Started
+## Testing with cURL
+
+### 1. Bash / Linux / macOS
 
 ```bash
-# 1. Install dependencies
-npm install
+# 1. Request OTP for an Indian phone number
+curl -X POST http://localhost:3000/api/auth/otp/request \
+  -H "Content-Type: application/json" \
+  -H "X-Requested-With: WeatherGPT" \
+  -d '{"contact": "9876543210"}'
 
-# 2. Configure environment
-cp .env.example .env
+# (In development with SMS_PROVIDER=console, check the server terminal for the 6-digit OTP)
 
-# 3. Start development server
-npm run dev
+# 2. Verify OTP, register user, and save session cookie to cookie jar
+curl -X POST http://localhost:3000/api/auth/otp/verify \
+  -c cookies.txt \
+  -H "Content-Type: application/json" \
+  -H "X-Requested-With: WeatherGPT" \
+  -d '{"contact": "9876543210", "code": "123456", "profile": {"role": "farmer", "location": "Pune", "preferredLanguage": "mr"}}'
 
-# 4. Start production server
-npm start
+# 3. Fetch current user using cookie
+curl -X GET http://localhost:3000/api/auth/me \
+  -b cookies.txt
+
+# 4. Update user profile
+curl -X PATCH http://localhost:3000/api/auth/me \
+  -b cookies.txt \
+  -H "Content-Type: application/json" \
+  -H "X-Requested-With: WeatherGPT" \
+  -d '{"location": "Mumbai", "preferredLanguage": "hi"}'
+
+# 5. Link an email to the account
+curl -X POST http://localhost:3000/api/auth/link/request \
+  -b cookies.txt \
+  -H "Content-Type: application/json" \
+  -H "X-Requested-With: WeatherGPT" \
+  -d '{"contact": "farmer@example.com"}'
+
+# 6. Verify and complete email linking
+curl -X POST http://localhost:3000/api/auth/link/verify \
+  -b cookies.txt \
+  -H "Content-Type: application/json" \
+  -H "X-Requested-With: WeatherGPT" \
+  -d '{"contact": "farmer@example.com", "code": "654321"}'
+
+# 7. Logout and clear cookie
+curl -X POST http://localhost:3000/api/auth/logout \
+  -b cookies.txt \
+  -c cookies.txt \
+  -H "X-Requested-With: WeatherGPT"
 ```
 
+### 2. Windows PowerShell / Command Prompt (`curl.exe`)
+
+```cmd
+:: 1. Request OTP for an email address
+curl.exe -X POST http://localhost:3000/api/auth/otp/request ^
+  -H "Content-Type: application/json" ^
+  -H "X-Requested-With: WeatherGPT" ^
+  -d "{\"contact\": \"user@example.com\"}"
+
+:: (Check server terminal console for printed OTP)
+
+:: 2. Verify OTP, register user, and save session cookie
+curl.exe -X POST http://localhost:3000/api/auth/otp/verify ^
+  -c cookies.txt ^
+  -H "Content-Type: application/json" ^
+  -H "X-Requested-With: WeatherGPT" ^
+  -d "{\"contact\": \"user@example.com\", \"code\": \"123456\", \"profile\": {\"role\": \"commuter\", \"location\": \"Delhi\", \"preferredLanguage\": \"hi\"}}"
+
+:: 3. Fetch current user using cookie
+curl.exe -X GET http://localhost:3000/api/auth/me ^
+  -b cookies.txt
+
+:: 4. Update user profile
+curl.exe -X PATCH http://localhost:3000/api/auth/me ^
+  -b cookies.txt ^
+  -H "Content-Type: application/json" ^
+  -H "X-Requested-With: WeatherGPT" ^
+  -d "{\"location\": \"New Delhi\"}"
+
+:: 5. Link Indian phone number to current account
+curl.exe -X POST http://localhost:3000/api/auth/link/request ^
+  -b cookies.txt ^
+  -H "Content-Type: application/json" ^
+  -H "X-Requested-With: WeatherGPT" ^
+  -d "{\"contact\": \"9876543210\"}"
+
+:: 6. Verify phone link
+curl.exe -X POST http://localhost:3000/api/auth/link/verify ^
+  -b cookies.txt ^
+  -H "Content-Type: application/json" ^
+  -H "X-Requested-With: WeatherGPT" ^
+  -d "{\"contact\": \"9876543210\", \"code\": \"654321\"}"
+
+:: 7. Logout
+curl.exe -X POST http://localhost:3000/api/auth/logout ^
+  -b cookies.txt ^
+  -c cookies.txt ^
+  -H "X-Requested-With: WeatherGPT"
+```
+
+---
+
+## Running the Application
+
+```bash
+# Start server in production mode
+npm start
+
+# Start server in development mode with auto-reload
+npm run dev
+```

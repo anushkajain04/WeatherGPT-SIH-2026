@@ -1,20 +1,36 @@
 import app from './app.js';
 import env from './config/env.js';
 import logger from './utils/logger.js';
+import { connectDB, disconnectDB } from './config/db.js';
 import keepWarmService from './services/keep-warm.service.js';
 import cacheService from './services/cache.service.js';
 
 const port = env.PORT;
 
-const server = app.listen(port, () => {
-  logger.info(
-    { port, nodeEnv: env.NODE_ENV },
-    `WeatherGPT Backend service is running on port ${port}`
-  );
+let server;
 
-  // Start background keep-warm worker if enabled
-  keepWarmService.start();
-});
+async function startServer() {
+  try {
+    // 1. Establish database connection and synchronize indexes
+    await connectDB();
+
+    // 2. Start HTTP server
+    server = app.listen(port, () => {
+      logger.info(
+        { port, nodeEnv: env.NODE_ENV },
+        `WeatherGPT Backend service is running on port ${port}`
+      );
+
+      // Start background keep-warm worker if enabled
+      keepWarmService.start();
+    });
+  } catch (err) {
+    logger.fatal({ error: err.message }, 'Failed to start server due to startup error');
+    process.exit(1);
+  }
+}
+
+startServer();
 
 /**
  * Graceful shutdown handler for SIGTERM and SIGINT.
@@ -22,16 +38,22 @@ const server = app.listen(port, () => {
 function gracefulShutdown(signal) {
   logger.info({ signal }, `${signal} received. Initiating graceful shutdown...`);
 
+  if (!server) {
+    disconnectDB().finally(() => process.exit(0));
+    return;
+  }
+
   // Stop accepting new connections
-  server.close((err) => {
+  server.close(async (err) => {
     if (err) {
       logger.error({ err: err.message }, 'Error during HTTP server close');
       process.exit(1);
     }
 
-    logger.info('HTTP server closed. Stopping auxiliary workers...');
+    logger.info('HTTP server closed. Stopping auxiliary workers and database...');
     keepWarmService.stop();
     cacheService.destroy();
+    await disconnectDB();
 
     logger.info('Graceful shutdown complete. Exiting.');
     process.exit(0);
@@ -55,4 +77,3 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   logger.error({ reason }, 'Unhandled promise rejection detected');
 });
-

@@ -8,6 +8,29 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.coerce.number().int().positive().default(3000),
 
+  // Database Connection
+  MONGODB_URI: z.string().min(1, 'MONGODB_URI is required and cannot be empty'),
+
+  // Authentication & Secrets (at least 32 characters)
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
+  OTP_HASH_SECRET: z.string().min(32, 'OTP_HASH_SECRET must be at least 32 characters long'),
+
+  // Session Cookie Configuration
+  COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+  COOKIE_SECURE: z
+    .string()
+    .optional()
+    .transform((val) => val === 'true' || val === '1'),
+
+  // Delivery Providers & SMTP Configuration
+  MAIL_PROVIDER: z.enum(['console', 'smtp']).default('console'),
+  SMS_PROVIDER: z.enum(['console', 'custom']).default('console'),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().positive().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  EMAIL_FROM: z.string().default('WeatherGPT <noreply@weathergpt.local>'),
+
   // Upstream RAG Service
   RAG_BASE_URL: z.string().url('RAG_BASE_URL must be a valid URL'),
   RAG_API_KEY: z.string().min(1, 'RAG_API_KEY is required and cannot be empty'),
@@ -56,6 +79,18 @@ const parseEnv = () => {
 
   const data = result.data;
 
+  // Refuse console delivery drivers in production
+  if (data.NODE_ENV === 'production') {
+    if (data.MAIL_PROVIDER === 'console') {
+      console.error('FATAL: MAIL_PROVIDER cannot be set to "console" in production.');
+      process.exit(1);
+    }
+    if (data.SMS_PROVIDER === 'console') {
+      console.error('FATAL: SMS_PROVIDER cannot be set to "console" in production.');
+      process.exit(1);
+    }
+  }
+
   // Parse ALLOWED_ORIGINS into an array of clean origins
   const allowedOriginsList = data.ALLOWED_ORIGINS.split(',')
     .map((origin) => origin.trim())
@@ -66,12 +101,16 @@ const parseEnv = () => {
     process.exit(1);
   }
 
+  // Secure flag must be forced on when SameSite is 'none'
+  const effectiveCookieSecure =
+    data.COOKIE_SAME_SITE === 'none' ? true : Boolean(data.COOKIE_SECURE);
+
   return Object.freeze({
     ...data,
+    COOKIE_SECURE: effectiveCookieSecure,
     ALLOWED_ORIGINS_LIST: Object.freeze(allowedOriginsList),
   });
 };
 
 export const env = parseEnv();
 export default env;
-
