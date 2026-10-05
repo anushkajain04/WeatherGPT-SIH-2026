@@ -113,12 +113,13 @@ export class AuthController {
 
   /**
    * PATCH /api/auth/me
-   * Updates current user's profile (role, location, preferredLanguage only).
+   * Updates current user's profile (name, role, location, preferredLanguage).
    */
   async updateMe(req, res, next) {
     try {
-      const { role, location, preferredLanguage } = req.body;
+      const { name, role, location, preferredLanguage } = req.body;
       const updatedUser = await userService.updateUserProfile(req.user.id, {
+        name,
         role,
         location,
         preferredLanguage,

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './components/LoginPage';
 import Dashboard from './components/Dashboard';
 import ChatbotBar from './components/ChatbotBar';
@@ -7,19 +9,24 @@ import AlertModal from './components/AlertModal';
 import LocationModal from './components/LocationModal';
 import ProfileModal from './components/ProfileModal';
 import { INITIAL_CHAT, WEATHER, HOURLY, DAILY, AQI, ROLES } from './data/mockData';
-import { fetchDashboard, sendChat, logoutSession } from './api';
-import { setUnauthorizedHandler } from './api/client';
+import { fetchDashboard, sendChat } from './api';
 
-export default function App() {
-  const [user, setUser] = useState(null);             // { contact, role, language, location }
-  const [data, setData] = useState({ weather: WEATHER, hourly: HOURLY, daily: DAILY, aqi: AQI, advisory: ROLES.citizen });
-  const [alerts, setAlerts] = useState([]);            // alerts[] from the backend
-  const popupPending = useRef(false);                 // show the alert popup once right after login
+function WeatherApp() {
+  const { user, login, logout, updateUser } = useAuth();
+  const [data, setData] = useState({
+    weather: WEATHER,
+    hourly: HOURLY,
+    daily: DAILY,
+    aqi: AQI,
+    advisory: ROLES.normal_user || ROLES.citizen,
+  });
+  const [alerts, setAlerts] = useState([]); // alerts[] from the backend
+  const popupPending = useRef(false); // show the alert popup once right after login
   const [chatMessages, setChatMessages] = useState(INITIAL_CHAT);
   const [isListening, setIsListening] = useState(false);
-  const [dashError, setDashError] = useState('');      // shown as a banner if the dashboard can't load
-  const [reloadKey, setReloadKey] = useState(0);        // bump to retry the dashboard fetch
-  const [modal, setModal] = useState(null);            // 'alert' | 'profile' | 'location' | 'chat' | null
+  const [dashError, setDashError] = useState(''); // shown as a banner if the dashboard can't load
+  const [reloadKey, setReloadKey] = useState(0); // bump to retry the dashboard fetch
+  const [modal, setModal] = useState(null); // 'alert' | 'profile' | 'location' | 'chat' | null
 
   // mic "listening…" animation is cosmetic — auto-stops after 2.2s
   useEffect(() => {
@@ -42,23 +49,41 @@ export default function App() {
         popupPending.current = false;
       })
       .catch((err) => {
-        if (cancelled || err?.status === 401) return; // 401 is handled by the logout handler
+        if (cancelled || err?.status === 401) return;
         setDashError(err?.message || 'Could not load weather data.');
       });
-    return () => { cancelled = true; };
-  }, [user?.location, user?.role, reloadKey]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.location, user?.role, reloadKey]);
 
-  // any 401 from the backend (expired session) sends the user back to the login page
-  useEffect(() => { setUnauthorizedHandler(() => { setUser(null); setModal(null); }); }, []);
+  const handleLogin = (u) => {
+    popupPending.current = true;
+    login(u);
+  };
 
-  const login = (u) => { popupPending.current = true; setUser(u); };
-  const logout = () => { logoutSession(); setDashError(''); setUser(null); setModal(null); setIsListening(false); };
-  const close = () => { setModal(null); setIsListening(false); };
+  const handleLogout = async () => {
+    setDashError('');
+    setModal(null);
+    setIsListening(false);
+    await logout();
+  };
+
+  const close = () => {
+    setModal(null);
+    setIsListening(false);
+  };
+
   const sendMessage = async (text) => {
     const add = (msg) => setChatMessages((m) => [...m, { id: Date.now() + Math.random(), ...msg }]);
     add({ type: 'user', text });
     try {
-      const res = await sendChat({ message: text, language: user.language, location: user.location, role: user.role });
+      const res = await sendChat({
+        message: text,
+        language: user?.preferredLanguage || user?.language || 'en',
+        location: user?.location,
+        role: user?.role,
+      });
       if (res?.reply) add({ type: res.type || 'assistant', text: res.reply });
     } catch (err) {
       if (err?.status === 401) return;
@@ -66,45 +91,84 @@ export default function App() {
     }
   };
 
-  if (!user) return <LoginPage onLogin={login} />;
+  const handleSaveProfile = async ({ role, language }) => {
+    try {
+      await updateUser({ role, preferredLanguage: language });
+    } catch {
+      // Handled in context
+    }
+    close();
+  };
+
+  const handleApplyLocation = async (location) => {
+    try {
+      await updateUser({ location });
+    } catch {
+      // Handled in context
+    }
+    close();
+  };
 
   return (
-    <>
-      <Dashboard
-        user={user}
-        data={data}
-        alerts={alerts}
-        error={dashError}
-        onRetry={() => setReloadKey((k) => k + 1)}
-        onOpenAlert={() => setModal('alert')}
-        onOpenProfile={() => setModal('profile')}
-        onOpenLocation={() => setModal('location')}
-        onOpenChat={() => setModal('chat')}
-      />
-      <ChatbotBar onOpen={() => setModal('chat')} />
+    <ProtectedRoute fallback={<LoginPage onLogin={handleLogin} />}>
+      {user && (
+        <>
+          <Dashboard
+            user={user}
+            data={data}
+            alerts={alerts}
+            error={dashError}
+            onRetry={() => setReloadKey((k) => k + 1)}
+            onOpenAlert={() => setModal('alert')}
+            onOpenProfile={() => setModal('profile')}
+            onOpenLocation={() => setModal('location')}
+            onOpenChat={() => setModal('chat')}
+          />
+          <ChatbotBar onOpen={() => setModal('chat')} />
 
-      {modal === 'alert' && <AlertModal alert={alerts[0]} advisory={data.advisory} role={user.role} onClose={close} />}
-      {modal === 'location' && (
-        <LocationModal current={user.location} onClose={close} onApply={(location) => { setUser({ ...user, location }); close(); }} />
+          {modal === 'alert' && (
+            <AlertModal
+              alert={alerts[0]}
+              advisory={data.advisory}
+              role={user.role}
+              onClose={close}
+            />
+          )}
+          {modal === 'location' && (
+            <LocationModal
+              current={user.location}
+              onClose={close}
+              onApply={handleApplyLocation}
+            />
+          )}
+          {modal === 'profile' && (
+            <ProfileModal
+              user={user}
+              onClose={close}
+              onSave={handleSaveProfile}
+              onChangeLocation={() => setModal('location')}
+              onLogout={handleLogout}
+            />
+          )}
+          {modal === 'chat' && (
+            <ChatWindow
+              messages={chatMessages}
+              isListening={isListening}
+              onSend={sendMessage}
+              onToggleMic={() => setIsListening((v) => !v)}
+              onClose={close}
+            />
+          )}
+        </>
       )}
-      {modal === 'profile' && (
-        <ProfileModal
-          user={user}
-          onClose={close}
-          onSave={({ role, language }) => { setUser({ ...user, role, language }); close(); }}
-          onChangeLocation={() => setModal('location')}
-          onLogout={logout}
-        />
-      )}
-      {modal === 'chat' && (
-        <ChatWindow
-          messages={chatMessages}
-          isListening={isListening}
-          onSend={sendMessage}
-          onToggleMic={() => setIsListening((v) => !v)}
-          onClose={close}
-        />
-      )}
-    </>
+    </ProtectedRoute>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <WeatherApp />
+    </AuthProvider>
   );
 }

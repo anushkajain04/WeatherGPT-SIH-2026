@@ -3,6 +3,11 @@ import { WHITELISTED_ROLES, SUPPORTED_LANGUAGE_CODES } from '../config/constants
 
 const userSchema = new mongoose.Schema(
   {
+    name: {
+      type: String,
+      trim: true,
+      maxlength: 60,
+    },
     email: {
       type: String,
       lowercase: true,
@@ -44,6 +49,9 @@ const userSchema = new mongoose.Schema(
 
 // Prevent storing empty strings or nulls for optional sparse/partial index fields
 userSchema.pre('save', function () {
+  if (this.name === '' || this.name === null) {
+    this.name = undefined;
+  }
   if (this.email === '' || this.email === null) {
     this.email = undefined;
   }

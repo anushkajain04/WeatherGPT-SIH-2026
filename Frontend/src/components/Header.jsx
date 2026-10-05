@@ -1,6 +1,31 @@
 import { PersonIcon, PinIcon } from './Icons';
+import { useAuth } from '../context/AuthContext';
 
-export default function Header({ location, hasAlert, onAlert, onProfile, onLocation }) {
+function getDisplayName(user) {
+  if (!user) return '';
+  if (user.name && user.name.trim()) {
+    return user.name.trim();
+  }
+  const contact = (user.contact || user.phone || user.email || '').trim();
+  if (contact.includes('@')) {
+    const prefix = contact.split('@')[0];
+    if (prefix) {
+      return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+  }
+  const digits = contact.replace(/\D/g, '');
+  if (digits.length >= 4) {
+    const last4 = digits.slice(-4);
+    return `•••• ${last4}`;
+  }
+  return contact;
+}
+
+export default function Header({ user: propUser, location, hasAlert, onAlert, onProfile, onLocation }) {
+  const auth = useAuth();
+  const user = propUser || auth?.user;
+  const displayName = getDisplayName(user);
+
   return (
     <div style={{ background: 'var(--navy)', paddingTop: 'calc(env(safe-area-inset-top,0px) + 10px)' }} className="px-4 lg:px-6 pb-3 lg:pb-4 text-white sticky top-0 z-20">
       <div className="max-w-4xl mx-auto grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 lg:gap-x-6 gap-y-3 items-center">
@@ -20,8 +45,20 @@ export default function Header({ location, hasAlert, onAlert, onProfile, onLocat
               ⚠️ Alert
             </button>
           )}
-          <button onClick={onProfile} aria-label="Profile" className="w-11 h-11 lg:w-16 lg:h-16 rounded-full flex items-center justify-center shrink-0" style={{ background: 'rgba(255,255,255,.18)' }}>
-            <PersonIcon className="w-6 h-6 lg:w-9 lg:h-9" />
+          <button
+            onClick={onProfile}
+            aria-label="Profile"
+            className={`h-11 lg:h-14 rounded-full flex items-center justify-center gap-2 shrink-0 ${
+              displayName ? 'px-3 lg:px-4 max-w-[140px] sm:max-w-[200px] lg:max-w-xs' : 'w-11 lg:w-14'
+            }`}
+            style={{ background: 'rgba(255,255,255,.18)' }}
+          >
+            <PersonIcon className="w-5 h-5 lg:w-7 lg:h-7 shrink-0" />
+            {displayName && (
+              <span className="text-sm lg:text-base font-semibold truncate leading-none">
+                {displayName}
+              </span>
+            )}
           </button>
         </div>
 

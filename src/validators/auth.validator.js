@@ -24,6 +24,8 @@ export const otpVerifySchema = z.object({
 
   profile: z
     .object({
+      name: z.string().trim().min(2).max(60).optional(),
+
       role: z
         .enum(WHITELISTED_ROLES, {
           errorMap: () => ({
@@ -54,6 +56,8 @@ export const otpVerifySchema = z.object({
 
 export const updateProfileSchema = z
   .object({
+    name: z.string().trim().min(2).max(60).optional(),
+
     role: z
       .enum(WHITELISTED_ROLES, {
         errorMap: () => ({
@@ -80,8 +84,12 @@ export const updateProfileSchema = z
       .optional(),
   })
   .refine(
-    (data) => data.role !== undefined || data.location !== undefined || data.preferredLanguage !== undefined,
-    { message: 'At least one field (role, location, preferredLanguage) must be provided for update.' }
+    (data) =>
+      data.name !== undefined ||
+      data.role !== undefined ||
+      data.location !== undefined ||
+      data.preferredLanguage !== undefined,
+    { message: 'At least one field (name, role, location, preferredLanguage) must be provided for update.' }
   );
 
 export const linkContactRequestSchema = z.object({

@@ -79,12 +79,14 @@ POST /api/chat         POST /api/chat/voice     /api/auth/*
     ├── controllers/
     │   ├── auth.controller.js             # Passwordless OTP, profile, session, and contact linking
     │   ├── chat.controller.js             # Text and voice chat orchestration
+    │   ├── geocoding.controller.js        # Coordinate reverse geocoding via OpenStreetMap Nominatim
     │   ├── health.controller.js           # Liveness and subsystem status checks
     │   └── tts.controller.js              # On-demand speech synthesis delivery
     ├── middleware/
     │   ├── auth.middleware.js             # Optional client API key enforcement (non-auth routes)
     │   ├── csrf-header.middleware.js      # X-Requested-With: WeatherGPT enforcement on mutating routes
     │   ├── error-handler.middleware.js    # Centralized error mapping and secret sanitization
+    │   ├── geocoding-rate-limit.middleware.js # IP rate limiting on reverse geocoding route
     │   ├── otp-rate-limit.middleware.js   # IP rate limiting on OTP endpoints
     │   ├── rate-limit.middleware.js       # IP rate limiting on chat endpoints
     │   ├── request-id.middleware.js       # Request UUID and child logger attachment
@@ -96,6 +98,7 @@ POST /api/chat         POST /api/chat/voice     /api/auth/*
     ├── routes/
     │   ├── auth.routes.js                 # POST /otp/request, /otp/verify, GET/PATCH /me, /logout, /link/*
     │   ├── chat.routes.js                 # POST /api/chat, POST /api/chat/voice
+    │   ├── geocoding.routes.js            # GET /api/city/resolve?lat=&lon=
     │   ├── health.routes.js               # GET /api/health, GET /api/status
     │   └── tts.routes.js                  # POST /api/tts
     ├── services/
@@ -112,6 +115,7 @@ POST /api/chat         POST /api/chat/voice     /api/auth/*
     │   │   ├── tts.service.js             # Text-to-speech with native script code handling
     │   │   └── transliterate.service.js   # Romanized-to-Indic script transliteration
     │   ├── cache.service.js               # Pluggable in-memory TTL cache (Redis-ready)
+    │   ├── geocoding.service.js           # OSM Nominatim reverse geocoding with 24h caching
     │   ├── keep-warm.service.js           # Background pinger for Render free-tier keepalive
     │   ├── language-resolver.service.js   # Multilingual detection & heuristic resolution
     │   ├── rag.service.js                 # Upstream Python RAG client with adaptive timeouts
@@ -124,6 +128,7 @@ POST /api/chat         POST /api/chat/voice     /api/auth/*
     └── validators/
         ├── auth.validator.js              # Zod schemas for OTP, profile, and link requests
         ├── chat.validator.js              # Zod schemas for chat and voice inputs
+        ├── geocoding.validator.js         # Zod schemas for lat/lon query parameters
         └── tts.validator.js               # Zod schemas for text-to-speech requests
 ```
 
@@ -163,6 +168,7 @@ cp .env.example .env
 | `RAG_COLD_TIMEOUT_MS` | No | `65000` (65s) | Timeout for first or cold-started RAG request |
 | `RAG_WARM_TIMEOUT_MS` | No | `10000` (10s) | Timeout for subsequent warm RAG requests |
 | `KEEP_WARM` | No | `false` | When `true`, pings `{RAG_BASE_URL}/health` every 10 mins |
+| `GEOCODING_CONTACT_EMAIL` | No | `contact@weathergpt.local` | Contact email included in Nominatim User-Agent header |
 | `CLIENT_API_KEY` | No | — | Optional internal API key for legacy services |
 
 ---
@@ -209,6 +215,64 @@ cp .env.example .env
 | `POST` | `/api/auth/logout` | No | Clear `wgpt_session` cookie. |
 | `POST` | `/api/auth/link/request` | Cookie | Request OTP to link secondary contact (phone or email). |
 | `POST` | `/api/auth/link/verify` | Cookie | Verify OTP and link secondary contact to account. |
+
+---
+
+## Reverse Geocoding Endpoint (`/api/city`)
+
+Resolves latitude and longitude coordinates into a clean city name and state using OpenStreetMap's Nominatim reverse geocoding API. Does not require authentication, allowing it to be used during login and onboarding.
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/api/city/resolve?lat=<number>&lon=<number>` | No | Resolves coordinates to city, state, and formatted label. Cached for 24h (~100m precision). |
+
+### Query Parameters
+- `lat` (**required**, number): Latitude between `-90` and `90`.
+- `lon` (**required**, number): Longitude between `-180` and `180`.
+
+*Invalid or missing coordinates return a `422 ValidationError`.*
+
+### Success Response (`200 OK`)
+```json
+{
+  "city": "Pune",
+  "state": "Maharashtra",
+  "formatted": "Pune, Maharashtra"
+}
+```
+
+### Error Responses
+- `422 Unprocessable Entity`: Input validation failure (missing or out-of-range coordinates).
+  ```json
+  {
+    "error": {
+      "code": "VALIDATION_ERROR",
+      "message": "Input validation failed",
+      "details": [{ "field": "lat", "message": "Latitude must be between -90 and 90" }]
+    },
+    "reqId": "..."
+  }
+  ```
+- `404 Not Found`: No usable city-level entity found, upstream Nominatim error, or request timeout.
+  ```json
+  {
+    "error": {
+      "code": "NOT_FOUND",
+      "message": "Unable to resolve location for the provided coordinates."
+    },
+    "reqId": "..."
+  }
+  ```
+- `429 Too Many Requests`: IP rate limit exceeded (30 requests per minute).
+
+### Upstream Policy & In-Memory Caching
+- **User-Agent Identification**: In compliance with Nominatim's usage policy, outgoing requests carry a descriptive `User-Agent: WeatherGPT-SIH-2026/1.0 (contact: <GEOCODING_CONTACT_EMAIL>)` header.
+- **24-Hour Cache**: Coordinates are rounded to 3 decimal places (~100m precision) and cached in-memory for 24 hours via `cache.service.js` to strictly respect Nominatim's 1 req/sec limit.
+- **Hierarchy Fallback**: Address extraction prefers `city`, falling back to `town`, `village`, and `county`.
+
+> [!IMPORTANT]
+> **OpenStreetMap Attribution Notice**:
+> Per OpenStreetMap Nominatim's usage policy, data from this service must be credited. A visible credit such as **"Location data © OpenStreetMap contributors"** must be included in the UI wherever locations resolved by this endpoint are shown.
 
 ---
 

@@ -8,6 +8,7 @@ export function sanitizeUser(user) {
   if (!user) return null;
   return {
     id: user._id.toString(),
+    name: user.name || null,
     email: user.email || null,
     phone: user.phone || null,
     role: user.role,
@@ -56,6 +57,7 @@ export async function findOrCreateUser(contactInfo, profile = {}) {
 
   // New user: construct initial document
   const newUserData = {
+    name: profile.name || undefined,
     role: profile.role || 'normal_user',
     location: profile.location || undefined,
     preferredLanguage: profile.preferredLanguage || 'en',
@@ -73,14 +75,15 @@ export async function findOrCreateUser(contactInfo, profile = {}) {
 }
 
 /**
- * Updates profile fields on the current user (role, location, preferredLanguage only).
+ * Updates profile fields on the current user (name, role, location, preferredLanguage).
  *
  * @param {string} userId
  * @param {object} updates
  */
-export async function updateUserProfile(userId, { role, location, preferredLanguage }) {
+export async function updateUserProfile(userId, { name, role, location, preferredLanguage }) {
   const user = await findUserById(userId);
 
+  if (name !== undefined) user.name = name || undefined;
   if (role !== undefined) user.role = role;
   if (location !== undefined) user.location = location || undefined;
   if (preferredLanguage !== undefined) user.preferredLanguage = preferredLanguage;

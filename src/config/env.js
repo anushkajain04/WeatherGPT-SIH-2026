@@ -58,6 +58,9 @@ const envSchema = z.object({
     .string()
     .optional()
     .transform((val) => val === 'true' || val === '1'),
+
+  // OpenStreetMap Nominatim Contact Email
+  GEOCODING_CONTACT_EMAIL: z.string().email().default('contact@weathergpt.local'),
 });
 
 const parseEnv = () => {
