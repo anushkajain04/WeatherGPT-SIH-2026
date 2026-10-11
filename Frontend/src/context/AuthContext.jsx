@@ -15,6 +15,8 @@ function normalizeUser(raw) {
     ...raw,
     name: raw.name || null,
     contact,
+    emailVerified: raw.emailVerified ?? false,
+    phoneVerified: raw.phoneVerified ?? false,
     role: raw.role || 'normal_user',
     location: raw.location || 'Pune, Maharashtra',
     preferredLanguage,

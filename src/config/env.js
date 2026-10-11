@@ -34,6 +34,11 @@ const envSchema = z.object({
   // Upstream RAG Service
   RAG_BASE_URL: z.string().url('RAG_BASE_URL must be a valid URL'),
   RAG_API_KEY: z.string().min(1, 'RAG_API_KEY is required and cannot be empty'),
+  RAG_FORWARD_COORDS: z
+    .string()
+    .optional()
+    .transform((val) => val === 'true' || val === '1')
+    .default('false'),
 
   // Bhashini AI Credentials
   BHASHINI_UDYAT_KEY: z.string().min(1, 'BHASHINI_UDYAT_KEY is required and cannot be empty'),
@@ -50,7 +55,8 @@ const envSchema = z.object({
   CHAT_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
 
   // RAG Cold Start & Warm Timeouts (ms)
-  RAG_COLD_TIMEOUT_MS: z.coerce.number().int().positive().default(65000), // 65 seconds for cold start
+  // Cold start timeout set so attempt 1 + retry stay under 85s (e.g. 40s + 1s delay + 40s = 81s)
+  RAG_COLD_TIMEOUT_MS: z.coerce.number().int().positive().default(40000), // 40 seconds per attempt
   RAG_WARM_TIMEOUT_MS: z.coerce.number().int().positive().default(10000), // 10 seconds warm
 
   // Background Keep-Warm Worker for Render Free Tier
@@ -61,6 +67,9 @@ const envSchema = z.object({
 
   // OpenStreetMap Nominatim Contact Email
   GEOCODING_CONTACT_EMAIL: z.string().email().default('contact@weathergpt.local'),
+
+  // OpenWeatherMap API Key
+  OPENWEATHER_API_KEY: z.string().optional(),
 });
 
 const parseEnv = () => {

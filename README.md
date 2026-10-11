@@ -225,6 +225,7 @@ Resolves latitude and longitude coordinates into a clean city name and state usi
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
 | `GET` | `/api/city/resolve?lat=<number>&lon=<number>` | No | Resolves coordinates to city, state, and formatted label. Cached for 24h (~100m precision). |
+| `GET` | `/api/city/search?q=<string>` | No | Searches Indian cities, towns and villages via Open-Meteo Geocoding API (3-60 chars, cached 24h). |
 
 ### Query Parameters
 - `lat` (**required**, number): Latitude between `-90` and `90`.

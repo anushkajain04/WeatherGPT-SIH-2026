@@ -20,13 +20,35 @@ function getCacheKey(lat, lon) {
   return `${Number(lat).toFixed(3)},${Number(lon).toFixed(3)}`;
 }
 
+/**
+ * Helper to select the most relevant city/town/village name from an address object,
+ * stripping trailing administrative designations (Tahsil, Tehsil, Taluka, Taluk, Mandal, Block).
+ *
+ * @param {object} address
+ * @returns {string|null}
+ */
+function extractPlaceName(address) {
+  if (!address || typeof address !== 'object') return null;
+  const raw =
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    address.state_district ||
+    address.county ||
+    null;
+  if (!raw) return null;
+  const cleaned = raw.trim().replace(/\s+(?:Tahsil|Tehsil|Taluka|Taluk|Mandal|Block|District)$/i, '').trim();
+  return cleaned || raw.trim();
+}
+
 export class GeocodingService {
   /**
-   * Reverse-geocodes coordinates into a clean city, state, and formatted label.
+   * Reverse-geocodes coordinates into a clean city, state, formatted label, and lat/lon.
    *
    * @param {number} lat - Latitude (-90 to 90)
    * @param {number} lon - Longitude (-180 to 180)
-   * @returns {Promise<{ city: string, state: string | null, formatted: string }>}
+   * @returns {Promise<{ city: string, state: string | null, formatted: string, lat: number, lon: number }>}
    */
   async resolveCity(lat, lon) {
     const cacheKey = getCacheKey(lat, lon);
@@ -80,9 +102,7 @@ export class GeocodingService {
     }
 
     const address = data.address || {};
-
-    // Prefer city, falling back to town, then village, then county
-    const city = address.city || address.town || address.village || address.county || null;
+    const city = extractPlaceName(address);
     const state = address.state || null;
 
     if (!city) {
@@ -99,10 +119,181 @@ export class GeocodingService {
       city,
       state: state || null,
       formatted,
+      lat: Number(data.lat != null ? data.lat : lat),
+      lon: Number(data.lon != null ? data.lon : lon),
     };
 
     geocodingCache.set(cacheKey, result, CACHE_TTL_MS);
     return result;
+  }
+
+  /**
+   * Forward-geocodes an Indian postal code (pincode) into city, state, formatted label, and lat/lon.
+   *
+   * @param {string} pincode - 6-digit postal code
+   * @returns {Promise<{ city: string, state: string | null, formatted: string, lat: number, lon: number }>}
+   */
+  async resolvePincode(pincode) {
+    const cleanPin = String(pincode).trim();
+    const cacheKey = `pincode:${cleanPin}`;
+    const cached = geocodingCache.get(cacheKey);
+
+    if (cached) {
+      logger.debug({ cacheKey, result: cached }, 'Pincode geocoding cache hit');
+      return cached;
+    }
+
+    const contactEmail = env.GEOCODING_CONTACT_EMAIL || 'contact@weathergpt.local';
+    const userAgent = `WeatherGPT-SIH-2026/1.0 (contact: ${contactEmail})`;
+    const url = `https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(cleanPin)}&country=India&format=jsonv2&accept-language=en&addressdetails=1`;
+
+    let data;
+    try {
+      const response = await httpClient(url, {
+        method: 'GET',
+        headers: {
+          'User-Agent': userAgent,
+          Accept: 'application/json',
+        },
+        timeoutMs: 5000,
+        retries: 1,
+      });
+
+      if (!response.ok) {
+        logger.warn(
+          { status: response.status, pincode: cleanPin },
+          'Nominatim pincode geocoding upstream returned non-200 status'
+        );
+        throw new NotFoundError('Unable to resolve location for the provided pincode.');
+      }
+
+      data = await response.json();
+    } catch (err) {
+      if (err instanceof NotFoundError) {
+        throw err;
+      }
+
+      logger.warn(
+        { pincode: cleanPin, error: err.message, isTimeout: err.isTimeout },
+        'Nominatim pincode search request failed or timed out'
+      );
+      throw new NotFoundError('Unable to resolve location for the provided pincode.');
+    }
+
+    if (!Array.isArray(data) || data.length === 0) {
+      logger.info({ pincode: cleanPin }, 'Nominatim returned empty result for pincode');
+      throw new NotFoundError('No city found for the provided pincode.');
+    }
+
+    const firstResult = data[0];
+    const address = firstResult.address || {};
+    const city = extractPlaceName(address);
+    const state = address.state || null;
+
+    if (!city) {
+      logger.info({ address, pincode: cleanPin }, 'No usable city-level field in Nominatim pincode response');
+      throw new NotFoundError('No city found for the provided pincode.');
+    }
+
+    const formatted =
+      state && state.toLowerCase() !== city.toLowerCase()
+        ? `${city}, ${state}`
+        : city;
+
+    const result = {
+      city,
+      state: state || null,
+      formatted,
+      lat: Number(firstResult.lat),
+      lon: Number(firstResult.lon),
+    };
+
+    geocodingCache.set(cacheKey, result, CACHE_TTL_MS);
+    return result;
+  }
+
+  /**
+   * Searches places across India using Open-Meteo Geocoding API.
+   *
+   * @param {string} query - 3 to 60 characters search term
+   * @returns {Promise<Array<{ label: string, name: string, state: string | null, lat: number, lon: number }>>}
+   */
+  async searchPlaces(query) {
+    const cleanQuery = String(query).trim().toLowerCase();
+    const cacheKey = `search:${cleanQuery}`;
+    const cached = geocodingCache.get(cacheKey);
+
+    if (cached) {
+      logger.debug({ cacheKey, resultCount: cached.length }, 'Place search cache hit');
+      return cached;
+    }
+
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanQuery)}&count=8&language=en&format=json&countryCode=IN`;
+
+    let data;
+    try {
+      const response = await httpClient(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        timeoutMs: 5000,
+        retries: 1,
+      });
+
+      if (!response.ok) {
+        logger.warn(
+          { status: response.status, query: cleanQuery },
+          'Open-Meteo place search upstream returned non-200 status'
+        );
+        throw new AppError('Geocoding service unavailable.', 502, 'GEOCODING_UNAVAILABLE');
+      }
+
+      data = await response.json();
+    } catch (err) {
+      if (err instanceof AppError) throw err;
+
+      logger.warn(
+        { query: cleanQuery, error: err.message, isTimeout: err.isTimeout },
+        'Open-Meteo place search request failed or timed out'
+      );
+      throw new AppError('Geocoding service unavailable.', 502, 'GEOCODING_UNAVAILABLE');
+    }
+
+    const rawList = Array.isArray(data?.results) ? data.results : [];
+    const results = [];
+    const seen = new Set();
+
+    for (const item of rawList) {
+      const name = (item.name || '').trim();
+      const state = (item.admin1 || item.state || null)?.trim() || null;
+      if (!name) continue;
+
+      // Filter to Latin-only characters
+      const isLatin = /^[A-Za-z0-9\s,.'()-]+$/.test(name) && (!state || /^[A-Za-z0-9\s,.'()-]+$/.test(state));
+      if (!isLatin) continue;
+
+      const label = state && state.toLowerCase() !== name.toLowerCase() ? `${name}, ${state}` : name;
+      const lat = Number(Number(item.latitude).toFixed(4));
+      const lon = Number(Number(item.longitude).toFixed(4));
+      const dedupKey = `${label.toLowerCase()}:${lat}:${lon}`;
+
+      if (seen.has(dedupKey)) continue;
+      seen.add(dedupKey);
+
+      results.push({
+        label,
+        name,
+        state: state || null,
+        lat,
+        lon,
+      });
+
+      if (results.length >= 8) break;
+    }
+
+    geocodingCache.set(cacheKey, results, CACHE_TTL_MS);
+    return results;
   }
 }
 

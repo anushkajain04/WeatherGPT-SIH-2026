@@ -23,6 +23,12 @@ async function startServer() {
 
       // Start background keep-warm worker if enabled
       keepWarmService.start();
+
+      if (!env.OPENWEATHER_API_KEY || env.OPENWEATHER_API_KEY === 'your_openweather_api_key_here') {
+        logger.warn(
+          'OPENWEATHER_API_KEY is not configured or is a placeholder. Dashboard weather endpoints will return 503 WEATHER_NOT_CONFIGURED.'
+        );
+      }
     });
   } catch (err) {
     logger.fatal({ error: err.message }, 'Failed to start server due to startup error');

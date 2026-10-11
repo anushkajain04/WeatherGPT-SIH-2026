@@ -11,6 +11,25 @@ export const CITIES = [
   'Lucknow, Uttar Pradesh',
 ];
 
+export const POPULAR_CITIES = [
+  { name: 'Delhi', label: 'Delhi', lat: 28.61, lon: 77.21 },
+  { name: 'Mumbai', label: 'Mumbai, Maharashtra', lat: 19.08, lon: 72.88 },
+  { name: 'Kolkata', label: 'Kolkata, West Bengal', lat: 22.57, lon: 88.36 },
+  { name: 'Chennai', label: 'Chennai, Tamil Nadu', lat: 13.08, lon: 80.27 },
+  { name: 'Bengaluru', label: 'Bengaluru, Karnataka', lat: 12.97, lon: 77.59 },
+  { name: 'Hyderabad', label: 'Hyderabad, Telangana', lat: 17.39, lon: 78.49 },
+  { name: 'Pune', label: 'Pune, Maharashtra', lat: 18.52, lon: 73.86 },
+  { name: 'Ahmedabad', label: 'Ahmedabad, Gujarat', lat: 23.02, lon: 72.57 },
+  { name: 'Jaipur', label: 'Jaipur, Rajasthan', lat: 26.91, lon: 75.79 },
+  { name: 'Lucknow', label: 'Lucknow, Uttar Pradesh', lat: 26.85, lon: 80.95 },
+  { name: 'Bhopal', label: 'Bhopal, Madhya Pradesh', lat: 23.26, lon: 77.41 },
+  { name: 'Indore', label: 'Indore, Madhya Pradesh', lat: 22.72, lon: 75.86 },
+  { name: 'Patna', label: 'Patna, Bihar', lat: 25.61, lon: 85.14 },
+  { name: 'Chandigarh', label: 'Chandigarh', lat: 30.73, lon: 76.78 },
+  { name: 'Guwahati', label: 'Guwahati, Assam', lat: 26.14, lon: 91.74 },
+  { name: 'Bhubaneswar', label: 'Bhubaneswar, Odisha', lat: 20.30, lon: 85.82 },
+];
+
 export const ROLE_OPTIONS = [
   { value: 'normal_user', label: '👤 General citizen' },
   { value: 'farmer', label: '🌾 Farmer' },
@@ -30,17 +49,17 @@ export const ROLE_NAMES = {
 
 export const LANGUAGE_OPTIONS = [
   { code: 'en', label: 'English' },
-  { code: 'hi', label: 'हिन्दी (Hindi)' },
-  { code: 'bn', label: 'বাংলা (Bengali)' },
-  { code: 'mr', label: 'मराठी (Marathi)' },
-  { code: 'ta', label: 'தமிழ் (Tamil)' },
-  { code: 'te', label: 'తెలుగు (Telugu)' },
-  { code: 'gu', label: 'ગુજરાતી (Gujarati)' },
-  { code: 'kn', label: 'ಕನ್ನಡ (Kannada)' },
-  { code: 'pa', label: 'ਪੰਜਾਬੀ (Punjabi)' },
-  { code: 'or', label: 'ଓଡ଼ିଆ (Odia)' },
-  { code: 'ml', label: 'മലയാളം (Malayalam)' },
-  { code: 'ur', label: 'اردو (Urdu)' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'bn', label: 'বাংলা' },
+  { code: 'mr', label: 'मराठी' },
+  { code: 'ta', label: 'தமிழ்' },
+  { code: 'te', label: 'తెలుగు' },
+  { code: 'gu', label: 'ગુજરાતી' },
+  { code: 'kn', label: 'ಕನ್ನಡ' },
+  { code: 'pa', label: 'ਪੰਜਾਬੀ' },
+  { code: 'or', label: 'ଓଡ଼ିଆ' },
+  { code: 'ml', label: 'മലയാളം' },
+  { code: 'ur', label: 'اردو' },
 ];
 
 export const LANGUAGES = LANGUAGE_OPTIONS.map((l) => l.label);

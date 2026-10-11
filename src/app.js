@@ -14,6 +14,7 @@ import chatRouter from './routes/chat.routes.js';
 import ttsRouter from './routes/tts.routes.js';
 import authRouter from './routes/auth.routes.js';
 import geocodingRouter from './routes/geocoding.routes.js';
+import dashboardRouter from './routes/dashboard.routes.js';
 
 export const app = express();
 
@@ -68,6 +69,7 @@ app.use('/api', chatRouter);
 app.use('/api', ttsRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/city', geocodingRouter);
+app.use('/api/dashboard', dashboardRouter);
 
 // 7. 404 Fallback for unmatched routes
 app.use((req, res, next) => {

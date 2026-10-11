@@ -17,7 +17,11 @@ export function validate(schema, target = 'body') {
         message: issue.message,
       }));
 
-      return next(new ValidationError('Input validation failed', fieldErrors));
+      const summary = fieldErrors
+        .map((f) => (f.field ? `${f.field}: ${f.message}` : f.message))
+        .join('; ');
+
+      return next(new ValidationError(`Input validation failed: ${summary}`, fieldErrors));
     }
 
     // Assign sanitized and parsed values back to request

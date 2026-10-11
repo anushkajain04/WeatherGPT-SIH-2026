@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { SUPPORTED_LANGUAGE_CODES, WHITELISTED_ROLES } from '../config/constants.js';
 
 const locationRegex = /^[a-zA-Z\s,-]+$/;
+const sessionIdRegex = /^[a-zA-Z0-9_-]{1,100}$/;
 
 export const chatBodySchema = z.object({
   query: z
@@ -36,8 +37,31 @@ export const chatBodySchema = z.object({
     .optional()
     .or(z.literal('')),
 
-  sessionId: z.string().trim().max(100).optional().or(z.literal('')),
-});
+  sessionId: z
+    .string()
+    .trim()
+    .regex(sessionIdRegex, 'Field "sessionId" must be 1 to 100 characters from letters, digits, underscore and hyphen')
+    .optional()
+    .or(z.literal('')),
+
+  lat: z
+    .number()
+    .min(-90, 'Field "lat" must be between -90 and 90')
+    .max(90, 'Field "lat" must be between -90 and 90')
+    .optional(),
+
+  lon: z
+    .number()
+    .min(-180, 'Field "lon" must be between -180 and 180')
+    .max(180, 'Field "lon" must be between -180 and 180')
+    .optional(),
+}).refine(
+  (data) => (data.lat == null && data.lon == null) || (data.lat != null && data.lon != null),
+  {
+    message: 'Both lat and lon must be provided together, or neither',
+    path: ['lat'],
+  }
+);
 
 export const voiceChatBodySchema = z.object({
   language: z
@@ -64,6 +88,29 @@ export const voiceChatBodySchema = z.object({
     .optional()
     .or(z.literal('')),
 
-  sessionId: z.string().trim().max(100).optional().or(z.literal('')),
-});
+  sessionId: z
+    .string()
+    .trim()
+    .regex(sessionIdRegex, 'Field "sessionId" must be 1 to 100 characters from letters, digits, underscore and hyphen')
+    .optional()
+    .or(z.literal('')),
+
+  lat: z
+    .number()
+    .min(-90, 'Field "lat" must be between -90 and 90')
+    .max(90, 'Field "lat" must be between -90 and 90')
+    .optional(),
+
+  lon: z
+    .number()
+    .min(-180, 'Field "lon" must be between -180 and 180')
+    .max(180, 'Field "lon" must be between -180 and 180')
+    .optional(),
+}).refine(
+  (data) => (data.lat == null && data.lon == null) || (data.lat != null && data.lon != null),
+  {
+    message: 'Both lat and lon must be provided together, or neither',
+    path: ['lat'],
+  }
+);
 

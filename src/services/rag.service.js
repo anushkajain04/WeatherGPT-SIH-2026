@@ -77,17 +77,23 @@ export class RAGService {
    * @param {string} params.query - Must be in English
    * @param {string} [params.role='normal_user']
    * @param {string} [params.location] - Unmodified Latin-script geolocation string
+   * @param {number} [params.lat]
+   * @param {number} [params.lon]
    * @returns {Promise<{ answer: string, route: string, model_used: string, latency_seconds: number, location_resolved: any, isCached?: boolean }>}
    */
-  async queryRAG({ query, role = 'normal_user', location = '' }) {
+  async queryRAG({ query, role = 'normal_user', location = '', lat = null, lon = null }) {
     const normLocation = this.normalizeKeyPart(location);
     const normQuery = this.normalizeKeyPart(query);
-    const cacheKey = `${RAG_CACHE_PREFIX}${normLocation}:${normQuery}:${role}`;
+    const coordsKey =
+      lat != null && lon != null
+        ? `:${Number(lat).toFixed(2)}:${Number(lon).toFixed(2)}`
+        : '';
+    const cacheKey = `${RAG_CACHE_PREFIX}${normLocation}${coordsKey}:${normQuery}:${role}`;
 
     // Check 10-minute cache to conserve LLM quota
     const cachedResponse = cacheService.get(cacheKey);
     if (cachedResponse) {
-      logger.debug({ location, query }, 'RAG answer served from 10m cache');
+      logger.debug({ location, query, lat, lon }, 'RAG answer served from 10m cache');
       return { ...cachedResponse, isCached: true };
     }
 
@@ -95,7 +101,7 @@ export class RAGService {
     const timeoutMs = warm ? env.RAG_WARM_TIMEOUT_MS : env.RAG_COLD_TIMEOUT_MS;
 
     logger.debug(
-      { isWarm: warm, timeoutMs, location, role },
+      { isWarm: warm, timeoutMs, location, role, lat, lon },
       'Sending request to upstream RAG service...'
     );
 
@@ -105,6 +111,11 @@ export class RAGService {
       role,
       location: location || undefined,
     };
+
+    if (env.RAG_FORWARD_COORDS && lat != null && lon != null) {
+      payload.lat = Number(Number(lat).toFixed(2));
+      payload.lon = Number(Number(lon).toFixed(2));
+    }
 
     try {
       const response = await httpClient(url, {
@@ -141,16 +152,34 @@ export class RAGService {
       const data = await response.json();
       this.lastSuccessfulContact = Date.now();
 
+      const rawAnswer = data.answer || '';
+      // Heuristic detection: check if answer says weather data was unavailable
+      // Note: this is a temporary heuristic until the RAG service returns an explicit status.
+      const lowerAnswer = rawAnswer.toLowerCase();
+      const isWeatherUnavailable =
+        lowerAnswer.includes('unavailable') ||
+        lowerAnswer.includes("don't have any weather") ||
+        lowerAnswer.includes("don’t have any weather") ||
+        lowerAnswer.includes("can't provide a forecast") ||
+        lowerAnswer.includes("can’t provide a forecast");
+
+      if (isWeatherUnavailable) {
+        logger.warn({ location, role }, 'RAG reported weather data unavailable; skipping cache');
+      }
+
       const result = {
-        answer: data.answer,
+        answer: rawAnswer,
         route: data.route || 'rag',
         model_used: data.model_used || 'unknown',
         latency_seconds: data.latency_seconds || 0,
         location_resolved: data.location_resolved || null,
+        weatherUnavailable: isWeatherUnavailable,
       };
 
-      // Cache valid RAG response for ~10 minutes
-      cacheService.set(cacheKey, result, CACHE_TTLS.RAG_ANSWER_TTL_MS);
+      // Cache valid RAG response for ~10 minutes only if weather data was available
+      if (!isWeatherUnavailable) {
+        cacheService.set(cacheKey, result, CACHE_TTLS.RAG_ANSWER_TTL_MS);
+      }
 
       return result;
     } catch (err) {

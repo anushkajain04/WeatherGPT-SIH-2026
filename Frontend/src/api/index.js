@@ -1,5 +1,5 @@
 // Every backend call the UI makes lives here.
-import { get, post, patch, USE_MOCK, setToken, clearToken } from './client';
+import { get, post, patch, apiFetch, USE_MOCK, setToken, clearToken } from './client';
 import { WEATHER, HOURLY, DAILY, AQI, MOCK_ALERTS, ROLES } from '../data/mockData';
 
 const wait = (ms = 250) => new Promise((r) => setTimeout(r, ms));
@@ -120,20 +120,117 @@ export async function resolveCity(latOrCoords, maybeLon) {
 }
 
 /**
- * GET /dashboard?location=&role=
+ * GET /api/city/resolve-pincode?pincode=
+ * Resolves an Indian 6-digit PIN code into city, state, formatted
+ */
+export async function resolveCityByPincode(pincode) {
+  if (USE_MOCK) {
+    await wait(150);
+    return { city: 'Pune', state: 'Maharashtra', formatted: 'Pune, Maharashtra' };
+  }
+  return get('/city/resolve-pincode', { pincode: String(pincode).trim() });
+}
+
+/**
+ * GET /api/city/search?q=
+ * Searches Indian places by name via Open-Meteo
+ */
+export async function searchPlaces(query) {
+  if (USE_MOCK) {
+    await wait(150);
+    return [
+      { label: 'Pune, Maharashtra', name: 'Pune', state: 'Maharashtra', lat: 18.52, lon: 73.86 },
+    ];
+  }
+  const clean = String(query || '').trim();
+  if (clean.length < 3) return [];
+  return get('/city/search', { q: clean });
+}
+
+/**
+ * GET /dashboard?location=&role=&lat=&lon=
  * → { weather, hourly[], daily[], aqi, alerts[], advisory }
  */
-export async function fetchDashboard({ location, role }) {
+export async function fetchDashboard({ location, role, lat, lon }) {
   if (USE_MOCK) {
     await wait(150);
     const advisory = ROLES[role] || (role === 'normal_user' ? ROLES.citizen : ROLES.citizen);
     return { weather: WEATHER, hourly: HOURLY, daily: DAILY, aqi: AQI, alerts: MOCK_ALERTS, advisory };
   }
-  return get('/dashboard', { location, role });
+  const params = { location, role };
+  if (lat != null && lon != null && !isNaN(Number(lat)) && !isNaN(Number(lon))) {
+    params.lat = Number(Number(lat).toFixed(2));
+    params.lon = Number(Number(lon).toFixed(2));
+  }
+  return get('/dashboard', params);
 }
 
-/** POST /chat  { message, language, location, role }  →  { reply, type? } */
-export async function sendChat({ message, language, location, role }) {
+/**
+ * POST /chat  { query, role?, location?, language?, sessionId? }
+ * →  { answer, answerEnglish, detectedLanguage, languageConfidence, translationFailed, route, model_used, latency, timings }
+ */
+export async function sendChat(payload) {
   if (USE_MOCK) return null;
-  return post('/chat', { message, language, location, role });
+
+  const rawQuery = (payload?.query || payload?.text || payload?.message || '').trim();
+  const body = { query: rawQuery };
+
+  const WHITELISTED_ROLES = ['normal_user', 'farmer', 'commuter', 'tourist', 'outdoor_worker'];
+  let role = payload?.role;
+  if (role === 'citizen') role = 'normal_user';
+  if (role && WHITELISTED_ROLES.includes(role)) {
+    body.role = role;
+  }
+
+  // Extract city part before first comma, Latin letters, spaces, hyphens only
+  let rawLoc = payload?.location;
+  if (typeof rawLoc === 'object' && rawLoc !== null) {
+    rawLoc = rawLoc.label || rawLoc.city || rawLoc.name || '';
+  }
+  if (!rawLoc && payload?.fallbackLocation) {
+    rawLoc = typeof payload.fallbackLocation === 'object'
+      ? payload.fallbackLocation.label || payload.fallbackLocation.city || ''
+      : payload.fallbackLocation;
+  }
+
+  if (typeof rawLoc === 'string' && rawLoc.trim()) {
+    const cityPart = rawLoc.split(',')[0].split(' · ')[0];
+    const cleanLocation = cityPart.replace(/[^a-zA-Z\s-]/g, '').trim();
+    if (cleanLocation) {
+      body.location = cleanLocation;
+    }
+  }
+
+  console.debug('sendChat location sent:', body.location);
+
+  if (payload?.language && typeof payload.language === 'string') {
+    const cleanLanguage = payload.language.trim().toLowerCase();
+    if (cleanLanguage) {
+      body.language = cleanLanguage;
+    }
+  }
+
+  if (payload?.sessionId) {
+    const cleanSessionId = String(payload.sessionId)
+      .replace(/[^a-zA-Z0-9_-]/g, '_')
+      .slice(0, 100);
+    if (cleanSessionId) {
+      body.sessionId = cleanSessionId;
+    }
+  }
+
+  if (payload?.lat != null && payload?.lon != null && !isNaN(Number(payload.lat)) && !isNaN(Number(payload.lon))) {
+    body.lat = Number(Number(payload.lat).toFixed(2));
+    body.lon = Number(Number(payload.lon).toFixed(2));
+  }
+
+  if (import.meta.env?.DEV) {
+    console.log('sendChat payload:', JSON.stringify(body));
+  }
+
+  return apiFetch('/chat', {
+    method: 'POST',
+    body: JSON.stringify(body),
+    timeoutMs: 95000,
+  });
 }

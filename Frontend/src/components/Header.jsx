@@ -1,74 +1,178 @@
+import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PersonIcon, PinIcon } from './Icons';
 import { useAuth } from '../context/AuthContext';
+import { LANGUAGE_OPTIONS } from '../data/mockData';
 
-function getDisplayName(user) {
-  if (!user) return '';
-  if (user.name && user.name.trim()) {
-    return user.name.trim();
-  }
-  const contact = (user.contact || user.phone || user.email || '').trim();
-  if (contact.includes('@')) {
-    const prefix = contact.split('@')[0];
-    if (prefix) {
-      return prefix.charAt(0).toUpperCase() + prefix.slice(1);
-    }
-  }
-  const digits = contact.replace(/\D/g, '');
-  if (digits.length >= 4) {
-    const last4 = digits.slice(-4);
-    return `•••• ${last4}`;
-  }
-  return contact;
-}
-
-export default function Header({ user: propUser, location, hasAlert, onAlert, onProfile, onLocation }) {
+export default function Header({
+  user: propUser,
+  location,
+  hasAlert,
+  onAlert,
+  onProfile,
+  onLocation,
+  theme = 'light',
+  onToggleTheme,
+  onLanguageChange,
+}) {
+  const { t, i18n } = useTranslation();
   const auth = useAuth();
   const user = propUser || auth?.user;
-  const displayName = getDisplayName(user);
+  const currentLang = user?.preferredLanguage || user?.language || i18n.language || 'en';
+  const [langOpen, setLangOpen] = useState(false);
+  const langRef = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!langOpen) return;
+    const handleClickOutside = (e) => {
+      if (langRef.current && !langRef.current.contains(e.target)) {
+        setLangOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [langOpen]);
+
+  const activeOption = LANGUAGE_OPTIONS.find((l) => l.code === currentLang) || LANGUAGE_OPTIONS[0];
+
+  const handleSelectLang = (code) => {
+    i18n.changeLanguage(code);
+    if (onLanguageChange) {
+      onLanguageChange(code);
+    }
+    setLangOpen(false);
+  };
 
   return (
-    <div style={{ background: 'var(--navy)', paddingTop: 'calc(env(safe-area-inset-top,0px) + 10px)' }} className="px-4 lg:px-6 pb-3 lg:pb-4 text-white sticky top-0 z-20">
-      <div className="max-w-4xl mx-auto grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 lg:gap-x-6 gap-y-3 items-center">
-        {/* logo + name */}
-        <div className="col-start-1 row-start-1 flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 lg:w-14 lg:h-14 rounded-xl flex items-center justify-center text-xl lg:text-2xl shrink-0" style={{ background: 'var(--saffron)' }}>⛅</div>
-          <div className="min-w-0 flex flex-col justify-center">
-            <p className="font-bold leading-none text-lg lg:text-2xl">WeatherGPT</p>
-            <p className="text-[12px] lg:text-base opacity-75 leading-none mt-1.5 truncate">Ministry of Earth Sciences</p>
+    <header
+      style={{
+        background: 'var(--navy)',
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 8px)',
+      }}
+      className="px-3 sm:px-6 py-3 sm:py-3.5 text-white sticky top-0 z-30 shadow-md min-h-[64px] sm:min-h-[72px] flex items-center"
+    >
+      <div className="w-full max-w-6xl mx-auto flex items-center justify-between gap-3 sm:gap-4">
+        {/* Left: Brand logo + name */}
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div
+            className="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow-sm"
+            style={{ background: 'var(--saffron)' }}
+          >
+            ⛅
+          </div>
+          <div className="flex items-baseline gap-1.5 truncate">
+            <span className="font-bold text-lg sm:text-xl tracking-tight">WeatherGPT</span>
+            <span className="text-xs opacity-75 hidden md:inline ml-1 font-medium">MoES</span>
           </div>
         </div>
 
-        {/* alert + profile — centred vertically across the header on desktop */}
-        <div className="col-start-2 row-start-1 lg:row-span-2 self-center flex items-center gap-2 lg:gap-4">
+        {/* Right: Controls strip */}
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          {/* Location pill control */}
+          <button
+            type="button"
+            onClick={onLocation}
+            aria-label={`Change location. Currently ${location}`}
+            title={location}
+            className="h-8 sm:h-9 px-2.5 sm:px-3 rounded-full flex items-center gap-1.5 shrink-0 hover:bg-white/20 active:scale-95 transition-all text-xs font-medium border max-w-[140px] xs:max-w-[180px] sm:max-w-[220px]"
+            style={{
+              background: 'rgba(255,255,255,.16)',
+              borderColor: 'rgba(255,255,255,.25)',
+            }}
+          >
+            <PinIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span className="truncate">{location}</span>
+            <span className="hidden sm:inline opacity-70 shrink-0 font-normal">· {t('btn_change', 'change')}</span>
+          </button>
+
+          {/* Alert button */}
           {hasAlert && (
-            <button onClick={onAlert} className="inline-flex h-11 lg:h-14 min-w-[96px] lg:min-w-[10.5rem] px-3 lg:px-8 rounded-full text-base lg:text-lg font-bold items-center justify-center gap-1.5 lg:gap-2" style={{ background: 'var(--saffron)', color: 'var(--navy-dark)' }}>
-              ⚠️ Alert
+            <button
+              type="button"
+              onClick={onAlert}
+              className="h-8 sm:h-9 px-3 rounded-full text-xs font-bold flex items-center gap-1 shrink-0 shadow-sm active:scale-95 transition-all"
+              style={{ background: 'var(--saffron)', color: 'var(--navy-dark)' }}
+            >
+              ⚠️ {t('alert')}
             </button>
           )}
+
+          {/* Theme toggle */}
           <button
-            onClick={onProfile}
-            aria-label="Profile"
-            className={`h-11 lg:h-14 rounded-full flex items-center justify-center gap-2 shrink-0 ${
-              displayName ? 'px-3 lg:px-4 max-w-[140px] sm:max-w-[200px] lg:max-w-xs' : 'w-11 lg:w-14'
-            }`}
-            style={{ background: 'rgba(255,255,255,.18)' }}
+            type="button"
+            onClick={onToggleTheme}
+            aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 text-sm sm:text-base hover:bg-white/20 active:scale-95 transition-all"
+            style={{ background: 'rgba(255,255,255,.16)' }}
           >
-            <PersonIcon className="w-5 h-5 lg:w-7 lg:h-7 shrink-0" />
-            {displayName && (
-              <span className="text-sm lg:text-base font-semibold truncate leading-none">
-                {displayName}
-              </span>
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+
+          {/* Persistent native-script language switcher dropdown pill */}
+          <div className="relative" ref={langRef}>
+            <button
+              type="button"
+              onClick={() => setLangOpen((prev) => !prev)}
+              aria-expanded={langOpen}
+              aria-label="Select language"
+              title={`Language: ${activeOption.label}`}
+              className="h-8 sm:h-9 px-2.5 rounded-full flex items-center justify-center gap-1.5 shrink-0 hover:bg-white/20 active:scale-95 transition-all text-xs font-medium border"
+              style={{
+                background: 'rgba(255,255,255,.16)',
+                borderColor: 'rgba(255,255,255,.25)',
+              }}
+            >
+              <span className="select-none leading-none">🌐</span>
+              <span className="truncate max-w-[70px] sm:max-w-none">{activeOption.label}</span>
+              <span className="text-[10px] opacity-75 select-none">▾</span>
+            </button>
+
+            {langOpen && (
+              <div
+                className="absolute right-0 top-full mt-2 w-48 rounded-2xl shadow-2xl border p-1 z-50 overflow-y-auto max-h-72"
+                style={{
+                  background: 'var(--card)',
+                  borderColor: 'var(--line)',
+                  color: 'var(--ink)',
+                }}
+              >
+                {LANGUAGE_OPTIONS.map((l) => {
+                  const isSelected = l.code === currentLang;
+                  return (
+                    <button
+                      key={l.code}
+                      type="button"
+                      onClick={() => handleSelectLang(l.code)}
+                      className="w-full px-3 py-2 text-left text-xs sm:text-sm font-medium rounded-xl flex items-center justify-between transition-colors"
+                      style={{
+                        background: isSelected ? 'var(--navy)' : 'transparent',
+                        color: isSelected ? '#ffffff' : 'var(--ink)',
+                      }}
+                    >
+                      <span>{l.label}</span>
+                      {isSelected && <span className="font-bold text-xs">✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
             )}
+          </div>
+
+          {/* Profile control: avatar-style compact icon */}
+          <button
+            type="button"
+            onClick={onProfile}
+            aria-label="User Profile"
+            title={user?.name || user?.contact || 'Profile'}
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center shrink-0 hover:bg-white/20 active:scale-95 transition-all"
+            style={{ background: 'rgba(255,255,255,.22)' }}
+          >
+            <PersonIcon className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
-
-        {/* location */}
-        <button onClick={onLocation} className="col-span-2 lg:col-span-1 lg:col-start-1 lg:row-start-2 justify-self-start max-w-full min-h-[44px] lg:min-h-[48px] flex items-center gap-2 text-base lg:text-lg rounded-xl px-3 lg:px-5" style={{ background: 'rgba(255,255,255,.12)' }}>
-          <PinIcon className="shrink-0 lg:w-6 lg:h-6" />
-          <span className="font-medium truncate">{location}</span>
-          <span className="opacity-70 shrink-0">· change</span>
-        </button>
       </div>
-    </div>
+    </header>
   );
 }

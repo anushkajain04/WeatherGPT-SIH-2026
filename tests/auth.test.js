@@ -104,6 +104,8 @@ describe('Authentication Flow Integration Tests', () => {
     assert.strictEqual(body.error.code, 'VALIDATION_ERROR');
   });
 
+  let firstUserId = null;
+
   test('4. POST /api/auth/otp/verify succeeds with correct code and sets wgpt_session cookie', async () => {
     const res = await fetch(`${baseUrl}/api/auth/otp/verify`, {
       method: 'POST',
@@ -114,21 +116,16 @@ describe('Authentication Flow Integration Tests', () => {
       body: JSON.stringify({
         contact: TEST_EMAIL,
         code: capturedOtp,
-        profile: {
-          role: 'farmer',
-          location: 'Pune',
-          preferredLanguage: 'hi',
-        },
       }),
     });
 
     assert.strictEqual(res.status, 200);
     const body = await res.json();
     assert.strictEqual(body.success, true);
+    assert.strictEqual(body.isNewUser, true);
     assert.strictEqual(body.user.email, TEST_EMAIL);
-    assert.strictEqual(body.user.role, 'farmer');
-    assert.strictEqual(body.user.location, 'Pune');
-    assert.strictEqual(body.user.preferredLanguage, 'hi');
+    assert.strictEqual(body.user.role, 'normal_user');
+    firstUserId = body.user.id;
 
     // Extract cookie from Set-Cookie header
     const rawCookie = res.headers.get('set-cookie');
@@ -153,7 +150,7 @@ describe('Authentication Flow Integration Tests', () => {
     const body = await res.json();
     assert.strictEqual(body.success, true);
     assert.strictEqual(body.user.email, TEST_EMAIL);
-    assert.strictEqual(body.user.role, 'farmer');
+    assert.strictEqual(body.user.role, 'normal_user');
   });
 
   test('7. PATCH /api/auth/me updates user profile', async () => {
@@ -165,6 +162,7 @@ describe('Authentication Flow Integration Tests', () => {
         Cookie: sessionCookie,
       },
       body: JSON.stringify({
+        name: 'Test Farmer',
         role: 'tourist',
         location: 'Goa',
         preferredLanguage: 'en',
@@ -174,6 +172,7 @@ describe('Authentication Flow Integration Tests', () => {
     assert.strictEqual(res.status, 200);
     const body = await res.json();
     assert.strictEqual(body.success, true);
+    assert.strictEqual(body.user.name, 'Test Farmer');
     assert.strictEqual(body.user.role, 'tourist');
     assert.strictEqual(body.user.location, 'Goa');
     assert.strictEqual(body.user.preferredLanguage, 'en');
@@ -231,5 +230,42 @@ describe('Authentication Flow Integration Tests', () => {
     assert.ok(setCookie, 'Set-Cookie header must be sent on logout');
     // Cookie is cleared with max-age=0 or expires in past
     assert.ok(setCookie.includes('wgpt_session=;') || setCookie.includes('Expires=Thu, 01 Jan 1970'));
+  });
+
+  test('10. POST /api/auth/otp/verify on re-login returns existing user id and isNewUser false', async () => {
+    // Fast-forward lastSentAt past 30s cooldown for test speed
+    await Otp.updateOne({ contact: TEST_EMAIL }, { $set: { lastSentAt: new Date(Date.now() - 35000) } });
+    capturedOtp = null;
+    const reqRes = await fetch(`${baseUrl}/api/auth/otp/request`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'WeatherGPT',
+      },
+      body: JSON.stringify({ contact: TEST_EMAIL }),
+    });
+
+    assert.strictEqual(reqRes.status, 200);
+    assert.ok(capturedOtp, 'OTP must be captured for re-login');
+
+    const verifyRes = await fetch(`${baseUrl}/api/auth/otp/verify`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'WeatherGPT',
+      },
+      body: JSON.stringify({
+        contact: TEST_EMAIL,
+        code: capturedOtp,
+      }),
+    });
+
+    assert.strictEqual(verifyRes.status, 200);
+    const body = await verifyRes.json();
+    assert.strictEqual(body.success, true);
+    assert.strictEqual(body.isNewUser, false);
+    assert.strictEqual(body.user.id, firstUserId);
+    assert.strictEqual(body.user.email, TEST_EMAIL);
+    assert.strictEqual(body.user.name, 'Test Farmer');
   });
 });

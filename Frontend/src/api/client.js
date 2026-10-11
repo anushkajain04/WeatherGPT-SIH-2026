@@ -56,6 +56,16 @@ export async function apiFetch(path, options = {}) {
     ? path
     : `${BASE.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
 
+  const timeoutMs = options.timeoutMs;
+  const controller = new AbortController();
+  let timer = null;
+  if (timeoutMs) {
+    timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+  }
+  const signal = options.signal || (timeoutMs ? controller.signal : undefined);
+
   let res;
   try {
     res = await fetch(url, {
@@ -63,9 +73,15 @@ export async function apiFetch(path, options = {}) {
       method,
       credentials: 'include',
       headers,
+      signal,
     });
-  } catch {
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new ApiError('Request timed out', 504, 'TIMEOUT');
+    }
     throw new ApiError('Cannot reach the server. Check your connection or that the backend is running.', 0);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
   if (res.status === 401) {

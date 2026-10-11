@@ -18,7 +18,7 @@ export class ChatController {
    * @param {string} [params.sessionId]
    * @returns {Promise<object>} - Complete chat response payload
    */
-  async executeChatPipeline(req, { rawQuery, role = 'normal_user', location = '', explicitLanguage = null, sessionId = null }) {
+  async executeChatPipeline(req, { rawQuery, role = 'normal_user', location = '', explicitLanguage = null, sessionId = null, lat = null, lon = null }) {
     const startTime = Date.now();
     const timings = {
       detect: 0,
@@ -57,6 +57,8 @@ export class ChatController {
       query: englishQuery,
       role,
       location: effectiveLocation || '',
+      lat,
+      lon,
     });
     timings.rag = Date.now() - ragStart;
 
@@ -116,6 +118,7 @@ export class ChatController {
       model_used: ragResult.model_used,
       latency: ragResult.latency_seconds,
       location_resolved: ragResult.location_resolved,
+      weatherUnavailable: !!ragResult.weatherUnavailable,
       timings,
     };
   }
@@ -126,7 +129,7 @@ export class ChatController {
    */
   async handleChat(req, res, next) {
     try {
-      const { query, role, location, language, sessionId } = req.body;
+      const { query, role, location, language, sessionId, lat, lon } = req.body;
 
       const responsePayload = await this.executeChatPipeline(req, {
         rawQuery: query,
@@ -134,6 +137,8 @@ export class ChatController {
         location,
         explicitLanguage: language,
         sessionId,
+        lat,
+        lon,
       });
 
       res.status(200).json(responsePayload);

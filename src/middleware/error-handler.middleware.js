@@ -53,14 +53,14 @@ export function errorHandler(err, req, res, next) {
   if (statusCode >= 500 && !err.serverLog) {
     reqLogger.error({ reqId, statusCode, code, errMessage: err.message }, 'Server error response sent');
   } else if (statusCode >= 400 && statusCode < 500) {
-    reqLogger.warn({ reqId, statusCode, code, message }, 'Client error response sent');
+    reqLogger.warn({ reqId, statusCode, code, message, details }, 'Client error response sent');
   }
 
   const responseBody = {
     error: {
       code,
       message,
-      ...(details ? { details } : {}),
+      ...(details ? { details, fields: details } : {}),
     },
     reqId,
   };

@@ -17,4 +17,23 @@ export const resolveLocationQuerySchema = z.object({
   lon: coordinateSchema(-180, 180, 'lon'),
 });
 
-export default resolveLocationQuerySchema;
+export const resolvePincodeQuerySchema = z.object({
+  pincode: z
+    .string({ required_error: 'Query parameter "pincode" is required' })
+    .trim()
+    .regex(/^\d{6}$/, 'Query parameter "pincode" must be a valid 6-digit Indian postal code'),
+});
+
+export const searchPlacesQuerySchema = z.object({
+  q: z
+    .string({ required_error: 'Query parameter "q" is required' })
+    .trim()
+    .min(3, 'Query parameter "q" must be between 3 and 60 characters')
+    .max(60, 'Query parameter "q" must be between 3 and 60 characters'),
+});
+
+export default {
+  resolveLocationQuerySchema,
+  resolvePincodeQuerySchema,
+  searchPlacesQuerySchema,
+};

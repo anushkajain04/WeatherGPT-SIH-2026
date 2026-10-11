@@ -1,12 +1,21 @@
 import mongoose from 'mongoose';
 import { WHITELISTED_ROLES, SUPPORTED_LANGUAGE_CODES } from '../config/constants.js';
 
+function capitalizeWords(str) {
+  if (!str) return '';
+  return str
+    .split(' ')
+    .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : ''))
+    .join(' ');
+}
+
 const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
       trim: true,
       maxlength: 60,
+      set: (val) => (typeof val === 'string' ? capitalizeWords(val) : val),
     },
     email: {
       type: String,
@@ -14,10 +23,18 @@ const userSchema = new mongoose.Schema(
       trim: true,
       default: undefined,
     },
+    emailVerified: {
+      type: Boolean,
+      default: false,
+    },
     phone: {
       type: String,
       trim: true,
       default: undefined,
+    },
+    phoneVerified: {
+      type: Boolean,
+      default: false,
     },
     role: {
       type: String,
@@ -51,6 +68,8 @@ const userSchema = new mongoose.Schema(
 userSchema.pre('save', function () {
   if (this.name === '' || this.name === null) {
     this.name = undefined;
+  } else if (typeof this.name === 'string') {
+    this.name = capitalizeWords(this.name);
   }
   if (this.email === '' || this.email === null) {
     this.email = undefined;

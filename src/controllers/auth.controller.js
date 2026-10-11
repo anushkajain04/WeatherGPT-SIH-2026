@@ -65,18 +65,56 @@ export class AuthController {
 
   /**
    * POST /api/auth/otp/verify
-   * Verifies OTP, finds or creates user, applies profile on creation, sets session cookie.
+   * Verifies OTP, finds or creates user without profile data, sets session cookie.
    */
   async verifyOtp(req, res, next) {
+    let contactType = 'unknown';
     try {
-      const { contact, code, profile } = req.body;
+      const { contact, code } = req.body;
       const normalized = normalizeContact(contact);
+      contactType = normalized.type;
 
       // Verify OTP code (constant-time comparison, expiry & attempt checks)
-      await otpService.verifyOtp(normalized.contact, code);
+      try {
+        await otpService.verifyOtp(normalized.contact, code);
+      } catch (verifyErr) {
+        req.log.info(
+          {
+            contactType,
+            reason: verifyErr.message,
+            code: verifyErr.code || 'OTP_VERIFICATION_FAILED',
+          },
+          'OTP verification attempt failed'
+        );
+        throw verifyErr;
+      }
 
-      // Find or create user (profile is only applied if creating new user)
-      const user = await userService.findOrCreateUser(normalized, profile);
+      // Find or create user
+      let result;
+      try {
+        result = await userService.findOrCreateUser(normalized);
+      } catch (userErr) {
+        req.log.info(
+          {
+            contactType,
+            reason: userErr.message,
+            code: userErr.code || 'USER_RESOLUTION_FAILED',
+          },
+          'User resolution failed during OTP verify'
+        );
+        throw userErr;
+      }
+
+      const { user, isNewUser } = result;
+
+      req.log.info(
+        {
+          contactType,
+          userId: user.id,
+          isNewUser,
+        },
+        'OTP verification succeeded'
+      );
 
       // Issue 7-day JWT session token
       const sessionToken = tokenService.generateSessionToken(user.id);
@@ -90,8 +128,19 @@ export class AuthController {
       res.status(200).json({
         success: true,
         user,
+        isNewUser,
       });
     } catch (err) {
+      if (!['OTP_VERIFICATION_FAILED', 'USER_RESOLUTION_FAILED'].includes(err.code)) {
+        req.log.info(
+          {
+            contactType,
+            reason: err.message,
+            code: err.code || 'VERIFY_REQUEST_FAILED',
+          },
+          'OTP verify request failed'
+        );
+      }
       next(err);
     }
   }
@@ -113,16 +162,17 @@ export class AuthController {
 
   /**
    * PATCH /api/auth/me
-   * Updates current user's profile (name, role, location, preferredLanguage).
+   * Updates current user's profile (name, role, location, preferredLanguage, secondaryContact).
    */
   async updateMe(req, res, next) {
     try {
-      const { name, role, location, preferredLanguage } = req.body;
+      const { name, role, location, preferredLanguage, secondaryContact } = req.body;
       const updatedUser = await userService.updateUserProfile(req.user.id, {
         name,
         role,
         location,
         preferredLanguage,
+        secondaryContact,
       });
 
       res.status(200).json({

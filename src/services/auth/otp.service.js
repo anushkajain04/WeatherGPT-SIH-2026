@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import env from '../../config/env.js';
 import Otp from '../../models/otp.model.js';
+import OtpLockout from '../../models/otp-lockout.model.js';
 import { sendEmailOtp } from './email.service.js';
 import { sendSmsOtp } from './sms.service.js';
 import { ValidationError, RateLimitError } from '../../utils/errors.js';
@@ -10,6 +11,10 @@ const OTP_RETENTION_MS = 60 * 60 * 1000;   // 1 hour document retention for rate
 const RESEND_COOLDOWN_MS = 30 * 1000;       // 30 seconds resend cooldown
 const MAX_HOURLY_RESENDS = 5;               // 5 OTPs max per contact per hour
 const MAX_VERIFY_ATTEMPTS = 5;              // 5 verify attempts before code invalidation
+const HOURLY_BURST_COOLDOWN_MS = 30 * 1000; // Cooldown between counting separate hourly cap strikes
+const LOCKOUT_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours lockout
+const ROLLING_WINDOW_MS = 24 * 60 * 60 * 1000;   // 24 hours rolling window
+const MAX_HOURLY_STRIKES = 3;               // 3 strikes within 24 hours triggers 24h lock
 
 /**
  * Hash raw OTP code using HMAC-SHA256.
@@ -43,8 +48,22 @@ function safeCompare(a, b) {
  * @param {'email'|'phone'} contactType
  */
 export async function generateAndSendOtp(contact, contactType) {
-  const existing = await Otp.findOne({ contact });
   const now = new Date();
+
+  // 0. Check active 24-hour lockout tier
+  const lockout = await OtpLockout.findOne({ contact });
+  if (lockout && lockout.lockedUntil && lockout.lockedUntil > now) {
+    const unlockTimeStr = lockout.lockedUntil.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    });
+    throw new RateLimitError(
+      `Too many OTP requests. This contact is locked for 24 hours. You can try again after ${unlockTimeStr} (${lockout.lockedUntil.toISOString()}).`
+    );
+  }
+
+  const existing = await Otp.findOne({ contact });
 
   if (existing) {
     // 1. Resend cooldown check (30 seconds)
@@ -56,6 +75,43 @@ export async function generateAndSendOtp(contact, contactType) {
 
     // 2. Hourly send cap check (max 5 OTPs per hour)
     if (existing.resendCount >= MAX_HOURLY_RESENDS) {
+      // Track hourly cap strike in rolling 24-hour window
+      let userLockout = lockout || (await OtpLockout.findOne({ contact }));
+      if (!userLockout) {
+        userLockout = new OtpLockout({
+          contact,
+          hourlyCapHits: [],
+          expiresAt: new Date(now.getTime() + 48 * 60 * 60 * 1000),
+        });
+      }
+
+      const windowStart = now.getTime() - ROLLING_WINDOW_MS;
+      const recentHits = (userLockout.hourlyCapHits || []).filter((d) => d.getTime() > windowStart);
+
+      // Only append new hit if not duplicate hit within burst cooldown
+      const lastHit = recentHits[recentHits.length - 1];
+      if (!lastHit || now.getTime() - lastHit.getTime() > HOURLY_BURST_COOLDOWN_MS) {
+        recentHits.push(now);
+      }
+
+      userLockout.hourlyCapHits = recentHits;
+      userLockout.expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+      // If contact hits the hourly cap 3 separate times within 24 hours, lock for 24h
+      if (recentHits.length >= MAX_HOURLY_STRIKES) {
+        userLockout.lockedUntil = new Date(now.getTime() + LOCKOUT_DURATION_MS);
+        await userLockout.save();
+        const unlockTimeStr = userLockout.lockedUntil.toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        });
+        throw new RateLimitError(
+          `You have reached the hourly OTP limit ${recentHits.length} times in 24 hours. This contact is locked for the next 24 hours until ${unlockTimeStr} (${userLockout.lockedUntil.toISOString()}).`
+        );
+      }
+
+      await userLockout.save();
       throw new RateLimitError('Maximum OTP requests exceeded for this hour. Please try again later.');
     }
   }
